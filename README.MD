@@ -149,7 +149,7 @@ Raw CSVs are **not** committed (too large). Download them from [FIRMS](https://f
 # 1. Put FIRMS MODIS and VIIRS CSVs in ./dataset (subfolders are fine)
 
 # 2. Build the compact summary (once; re-run when CSVs change)
-pip install numpy pandas "shapely>=2.0"
+pip install -r requirements.txt   # run.py does this automatically
 python3 preprocess.py
 
 # 3. Serve the folder and open it

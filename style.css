@@ -96,3 +96,14 @@ button{font-family:inherit}
 .seg3 button{appearance:none;-webkit-appearance:none;background:transparent;border:0;border-radius:9px;color:var(--mute);font:inherit;font-size:12px;line-height:1.25;padding:7px 3px;cursor:pointer}
 .seg3 button[aria-pressed=true]{background:linear-gradient(135deg,#ff9a3c,#e8350f);color:#fff;font-weight:700}
 #normstatus{margin:4px 0}
+
+.sk{display:block;height:14px;border-radius:10px;margin:10px 0;background:linear-gradient(90deg,rgba(255,255,255,.07) 25%,rgba(255,255,255,.2) 50%,rgba(255,255,255,.07) 75%);background-size:200% 100%;animation:shim 1.2s infinite linear}
+.sk.c{width:54px;height:54px;border-radius:50%}.sk.s{width:60%}.sk.b{height:70px;border-radius:16px}
+.skrow{display:flex;gap:10px;justify-content:center;margin:12px 0}.skrow .sk{width:46px;height:46px;border-radius:50%;margin:0}
+@keyframes shim{to{background-position:-200% 0}}
+.busy{position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.busy[hidden]{display:none}.busy.on{opacity:1}
+.spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--ember);border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.progress.ind i{width:40%!important;animation:ind 1s ease-in-out infinite alternate}
+@keyframes ind{from{margin-left:0}to{margin-left:60%}}

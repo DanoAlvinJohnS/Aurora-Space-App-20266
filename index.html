@@ -16,6 +16,7 @@
 
 <section id="loading" class="glass card center" hidden>
   <h1>Loading fire data</h1>
+  <div class="skrow"><i class="sk"></i><i class="sk"></i><i class="sk"></i><i class="sk"></i></div>
   <p id="lmsg">Reading the prepared dataset …</p>
   <div class="progress"><i id="lbar"></i></div>
   <p id="ldetail" class="hint"></p>
@@ -74,6 +75,7 @@
   <label><input type="checkbox" id="cum" checked> Cumulative</label>
 </section>
 
+<div id="busy" class="glass busy" hidden><i class="spin"></i><span id="busytxt"></span></div>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
 <script type="module" src="app.js"></script>
 </body>
