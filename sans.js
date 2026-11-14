@@ -14,7 +14,7 @@
   .sans{position:fixed;top:0;left:0;z-index:2;width:${SIZE}px;height:auto;pointer-events:auto;cursor:pointer;
     image-rendering:pixelated;will-change:transform;filter:drop-shadow(0 0 10px rgba(168,85,247,.85)) drop-shadow(0 0 22px rgba(124,58,237,.5))}
   .sans-say{position:fixed;z-index:6;max-width:210px;padding:8px 12px;border-radius:10px;background:#fff;color:#000;
-    font:600 13px/1.3 "Exo 2",system-ui,sans-serif;pointer-events:none;box-shadow:0 0 18px rgba(168,85,247,.6)}
+    font:600 13px/1.3 var(--sf);pointer-events:none;box-shadow:0 0 18px rgba(168,85,247,.6)}
   .sans-say::after{content:"";position:absolute;bottom:-7px;left:18px;border:7px solid transparent;border-top-color:#fff;border-bottom:0}`;
   document.head.appendChild(css);/* Easter egg: Sans drifts across space now and then.
    - flies by himself every 30-60 seconds
@@ -32,7 +32,7 @@
   .sans{position:fixed;top:0;left:0;z-index:2;width:${SIZE}px;height:auto;pointer-events:auto;cursor:pointer;
     image-rendering:pixelated;will-change:transform;filter:drop-shadow(0 0 10px rgba(74,127,248,.85)) drop-shadow(0 0 22px rgba(255,118,72,.45))}
   .sans-say{position:fixed;z-index:6;max-width:210px;padding:8px 12px;border-radius:10px;background:#fff;color:#000;
-    font:600 13px/1.3 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,"Segoe UI",system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,.35)}
+    font:600 13px/1.3 var(--sf);pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,.35)}
   .sans-say::after{content:"";position:absolute;bottom:-7px;left:18px;border:7px solid transparent;border-top-color:#fff;border-bottom:0}`;
   document.head.appendChild(css);
 

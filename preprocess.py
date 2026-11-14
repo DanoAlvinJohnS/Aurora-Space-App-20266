@@ -11,7 +11,10 @@ root = pathlib.Path(__file__).parent
 NX, NY = 720, 360                      # 0.5 degree cells
 NC = NX * NY
 Y0, NYR = 2000, 40                     # years 2000..2039
-KEEP = {'latitude', 'longitude', 'acq_date', 'confidence', 'daynight'}
+KEEP = {'latitude', 'longitude', 'acq_date', 'confidence', 'daynight', 'brightness', 'bright_ti4'}
+# fire brightness temperature (Kelvin) per 1-degree cell: MODIS `brightness`, VIIRS `bright_ti4`
+TX, TY = 360, 180
+tsum = np.zeros(TX * TY); tcnt = np.zeros(TX * TY); tmin = np.full(TX * TY, np.inf); tmax = np.full(TX * TY, -np.inf)
 
 # ---- country of every cell (computed once, stored in the file) ----
 feats = json.load(open(root / 'assets' / 'countries.geojson'))['features']
@@ -58,7 +61,15 @@ for f in sorted((root / 'dataset').rglob('*.csv')):
         shared = ok & (yr >= 2012 - Y0)
         if shared.any():
             overlap_counts[sen] += np.bincount(cb[shared].astype(np.int64), minlength=3).astype(np.uint64)
+        bcol = 'bright_ti4' if sen else 'brightness'
+        br = num(ch[bcol]) if bcol in ch else np.full(len(ch), np.nan)
         la, lo, yr, mo, cb, dn = la[ok], lo[ok], yr[ok].astype(np.int64), mo[ok].astype(np.int64), cb[ok].astype(np.int64), dn[ok].astype(np.int64)
+        br = br[ok]
+        t1 = np.clip((90 - la).astype(np.int64), 0, TY - 1) * TX + np.clip((lo + 180).astype(np.int64), 0, TX - 1)
+        v = np.isfinite(br) & (br > 200) & (br < 600)
+        if v.any():
+            tcnt += np.bincount(t1[v], minlength=TX * TY); tsum += np.bincount(t1[v], weights=br[v], minlength=TX * TY)
+            np.minimum.at(tmin, t1[v], br[v]); np.maximum.at(tmax, t1[v], br[v])
         cell = np.clip(((90 - la) * 2).astype(np.int64), 0, NY - 1) * NX + np.clip(((lo + 180) * 2).astype(np.int64), 0, NX - 1)
         u, n = np.unique(((yr * 2 + sen) * 3 + cb) * NC + cell, return_counts=True)
         dense[u] += n.astype(np.uint32)
@@ -87,6 +98,9 @@ for i, (f, g) in enumerate(zip(feats, geoms)):
         y=y_by_sensor.sum(axis=0).tolist(), m=m_by_sensor.sum(axis=0).tolist(),
         dn=dn_by_sensor.sum(axis=0).tolist(), s=cs[i].tolist(),
         ys=y_by_sensor.tolist(), ms=m_by_sensor.tolist(), dns=dn_by_sensor.tolist()))
+tn = np.flatnonzero(tcnt)
+json.dump(dict(nx=TX, ny=TY, unit='K', cells=tn.tolist(), min=np.round(tmin[tn], 1).tolist(), max=np.round(tmax[tn], 1).tolist(),
+               mean=np.round(tsum[tn] / tcnt[tn], 1).tolist(), n=tcnt[tn].astype(int).tolist()), open(root / 'dataset' / 'temp.json', 'w'))
 scales = []
 for minimum in range(3):
     modis = int(overlap_counts[0, minimum:].sum())

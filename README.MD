@@ -1,4 +1,4 @@
-# FireGlobe
+# TeraFlare
 
 **An interactive 3D globe of global burning activity, harmonizing MODIS and VIIRS active-fire hotspots into one consistent picture.**
 
@@ -12,7 +12,7 @@ This repository includes a lightweight project scaffold and a clear local setup 
 
 ## Table of contents
 
-- [FireGlobe](#fireglobe)
+- [TeraFlare](#teraflare)
   - [Table of contents](#table-of-contents)
   - [The idea](#the-idea)
   - [Goal](#goal)
@@ -37,7 +37,7 @@ This repository includes a lightweight project scaffold and a clear local setup 
 
 Satellites have tracked active fires for more than two decades, but the record is split across sensors (MODIS and VIIRS) whose files use different confidence scales and brightness columns, so they cannot be compared directly. That leaves fire managers without one consistent picture of **when and where burning has occurred**.
 
-FireGlobe merges both records into a single, easy-to-read **burning activity map**. You start with the whole planet, then drill into a country, its history, and the specific locations that burn most.
+TeraFlare merges both records into a single, easy-to-read **burning activity map**. You start with the whole planet, then drill into a country, its history, and the specific locations that burn most.
 
 ## Goal
 
@@ -65,7 +65,7 @@ From NASA:
 | [Greenpeace Global Fire Dashboard](https://maps.greenpeace.org/fire_dashboard/) | Hotspots for wildfires; closest to our initial idea | Information overload; UI not intuitive; 2D map |
 | [EOS Land Viewer](https://eos.com/wildfire-detection-and-monitoring/) | Forest health and wildfire-risk monitoring | Pay-to-use; 2D map |
 
-**Takeaways:** most tools are real-time, 2D, and either crowded or paid. FireGlobe focuses on the **historical, harmonized** view in an intuitive **3D** interface that stays simple until you ask for detail.
+**Takeaways:** most tools are real-time, 2D, and either crowded or paid. TeraFlare focuses on the **historical, harmonized** view in an intuitive **3D** interface that stays simple until you ask for detail.
 
 ## Proposed solutions
 
@@ -78,21 +78,21 @@ The player builds wildfire relief and prevention buildings and technology (optio
 ## Features
 
 ### Overview (first)
-- **Land-attributed heat map** of burning activity: detections without a country assignment are excluded, keeping the heat focused on mapped land.
-- **Hexagon 3D** view: Globe.gl's H3 hexagonal prisms rise from the globe; their height and color show intensity.
-- **Raised hotspots** view: the original merged point markers, shown separately from the hexagon columns.
-- **Animated** grow-in when activity appears, and as the year changes.
-- Only three numbers are shown: **country mean, highest, lowest**. Highest and lowest are also labeled on the globe.
-- Time slider with **Play** and a **Cumulative** toggle to watch history build up.
+- Only the **land-attributed heat map** is shown before a country is selected.
+- Three numbers: **country mean, highest, lowest**; highest and lowest are labeled on the globe.
+- Time slider with **Play** and a **Cumulative** toggle, under the location pill at the bottom of the globe.
 
 ### Selected country (then specific)
-Click a country and every other country fades to grey. A panel with three tabs opens:
+Click a country: the others fade, **region/province outlines** appear colored by burning frequency, **3D hexagons** (top 1 / 10 / 25 / 50 / 100 % of hotspots, 10 % by default, set in Advanced settings) rise on top of the heat map, and a panel opens:
 
 | Tab | Contents |
 |---|---|
-| **Statistics** | Total detections, peak year, busiest month, MODIS/VIIRS split, day/night split; VIIRS values are marked as MODIS-equivalent when normalized |
-| **History** | Per-year chart (click a bar to jump to that year) and seasonality by month |
-| **Locations** | The 8 busiest ~100 km areas; click anywhere in the country to see that spot's yearly history |
+| **Statistics** | Overall total and average per region; the top 1-3 burning **regions** (you choose how many) and the lowest; highest, lowest and average **temperature** with region names; peak year and busiest month |
+| **History** | Buttons for **Per year**, **Seasonality** or **Both** (side by side). Each chart can be drawn as vertical bars, horizontal bars, a line or a pie. Below: busiest **named regions**; click a region or anywhere in the country for its yearly history and temperature |
+
+Region names come from Natural Earth admin-1 boundaries, loaded on first country selection from `assets/admin1.geojson` if present, otherwise from a CDN. Temperature comes from `dataset/temp.json`, written by `preprocess.py` (re-run `python run.py --rebuild` once).
+
+Branding: **Powerr** for the TeraFlare wordmark, **Bricolage Grotesque** for headings and numbers, **Figtree** for body text and details (both from Google Fonts), plus the TeraFlare logos from `assets/`.
 
 ### Options
 - Lighting: **Day / Night / Live** (real-time sun position from UTC)
@@ -118,7 +118,7 @@ FIRMS CSVs ──► preprocess.py ──► fire.bin + fire.json ──► brow
    - When both sensors have detections in 2012 or later, the optional overlap adjustment computes a global VIIRS weight for each confidence filter: MODIS detections in the shared period divided by VIIRS detections in that same period. The weight is applied to VIIRS counts in the map and country/location summaries.
 3. **Load.** The browser downloads `fire.bin` once and caches it (Cache API); later visits load instantly.
 4. **Aggregate.** One pass over the summary per setting, memoized, produces the grid shown as a heat map, H3 hexagonal prisms, or raised hotspots. Cells without a Natural Earth country assignment are omitted from the map layers.
-5. **Render.** Globe.gl renders the heat map with a narrow Gaussian density kernel, hexagons with its H3 bin layer, and raised hotspots as merged point markers. Heat-map smoothing can still extend slightly past coastlines.
+5. **Render.** The heat map first applies a weighted 3x3 neighborhood average to reduce single-cell noise, then uses an adaptive 60th-percentile floor and log-scaled contrast to emphasize local hotspots. Hexagons use Globe.gl's H3 bin layer, and raised hotspots use merged point markers. Heat-map smoothing can still extend slightly past coastlines.
 
 ## Dataset
 

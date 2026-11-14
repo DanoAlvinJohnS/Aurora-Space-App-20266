@@ -3,19 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FireGlobe – Burning activity from MODIS and VIIRS</title>
+<title>TeraFlare – Burning activity from MODIS and VIIRS</title>
+<link rel="icon" type="image/png" href="assets/Logos/TERAFLARE_LOGO_1.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=purple-2">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400..700&display=swap">
+<link rel="stylesheet" href="style.css?v=teraflare-5">
 </head>
 <body class="globe-page">
 <nav class="glass nav">
-  <div><a class="active" href="index.html">Globe</a><a href="about.html">About us</a></div>
+  <a class="brand" href="index.html"><img src="assets/Logos/TERAFLARE_LOGO_1.png" alt="" width="28" height="28">TeraFlare</a>
+  <div><a class="active" href="index.html" data-view="globe">Globe</a><a href="about.html" data-view="about">About us</a></div>
 </nav>
 
 <div id="globe"></div>
 <div id="names" aria-hidden="true"></div>
+<aside id="hotspot-legend" class="glass" aria-label="Hotspot intensity legend">
+  <span>High</span>
+  <i aria-hidden="true"></i>
+  <span>Low</span>
+</aside>
+
+<section id="timeline" class="glass tl" hidden>
+  <button id="play" class="btn">Play</button>
+  <input id="year" type="range" aria-label="Year">
+  <strong id="yl"></strong>
+  <label><input type="checkbox" id="cum" checked> Cumulative</label>
+</section>
 
 <section id="loading" class="glass card center" hidden>
   <h1>Loading fire data</h1>
@@ -30,50 +44,75 @@
   <div id="resize-handle" class="resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
   <div class="sidebar-head">
     <div>
-      <h1>FireGlobe</h1>
+      <h1><img class="logo" src="assets/Logos/TERAFLARE_LOGO_2.png" alt="" width="34" height="34"><span id="side-title">Dashboard</span></h1>
     </div>
     <button id="collapse" class="collapse" type="button" aria-label="Collapse sidebar" aria-expanded="true">‹</button>
   </div>
   <div class="sidebar-tabs" role="tablist" aria-label="Globe panels">
     <button type="button" role="tab" id="dashboard-tab" aria-controls="dashboard-panel" aria-selected="true">Dashboard</button>
-    <button type="button" role="tab" id="settings-tab" aria-controls="settings-panel" aria-selected="false">View settings</button>
+    <button type="button" role="tab" id="explore-tab" aria-controls="explore-panel" aria-selected="false">Explore</button>
   </div>
 
   <div id="dashboard-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="dashboard-tab">
-    <h3>Search by Country</h3>
-    <input id="csearch" type="search" placeholder="Search a country" aria-label="Search a country">
-    <div id="clist" class="list"></div>
-    <section id="timeline" class="glass tl" hidden>
-      <button id="play" class="btn">Play</button>
-      <input id="year" type="range" aria-label="Year">
-      <strong id="yl"></strong>
-      <label><input type="checkbox" id="cum" checked> Cumulative</label>
-    </section>
     <section id="status" aria-label="Burning activity">
       <h2>Burning activity</h2>
-      <p class="big"><span id="count">0</span> <span id="countlabel">detections shown</span></p>
-      <p id="meta" class="hint"></p>
-      <div class="legend"><span>Rarely burns</span><i></i><span>Burns often</span></div>
       <div id="detail"></div>
     </section>
+    <section id="search" class="acc" aria-label="Search by">
+      <button type="button" class="acc-h" id="search-h" aria-expanded="false" aria-controls="search-b"><span>Search by</span><i aria-hidden="true"></i></button>
+      <div class="acc-b" id="search-b" role="region" aria-labelledby="search-h"><div class="acc-in">
+        <div id="smode" class="seg3" role="group" aria-label="Search by">
+          <button type="button" data-m="country" aria-pressed="true">Country</button>
+          <button type="button" data-m="geo" aria-pressed="false">GeoJSON</button>
+          <button type="button" data-m="rect" aria-pressed="false">Region</button>
+        </div>
+        <div class="pane" id="pane-country">
+          <input id="csearch" type="search" placeholder="Search a country" autocomplete="off" spellcheck="false" aria-label="Search a country">
+          <div id="clist" class="list" role="list"></div>
+        </div>
+        <div class="pane" id="pane-geo" hidden>
+          <label class="drop" id="drop" for="gfile"><b>Choose a GeoJSON file</b><span>or drop it here</span></label>
+          <input id="gfile" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden>
+          <p id="gmsg" class="hint" hidden></p>
+        </div>
+        <div class="pane" id="pane-rect" hidden>
+          <button id="rbtn" class="btn ghost small" type="button" aria-pressed="false">Draw a rectangle</button>
+          <p id="rmsg" class="hint" hidden></p>
+        </div>
+      </div></div>
+    </section>
+    <section id="advanced" class="acc" aria-label="Advanced settings">
+      <button type="button" class="acc-h" id="advanced-h" aria-expanded="false" aria-controls="advanced-b"><span>Advanced settings</span><i aria-hidden="true"></i></button>
+      <div class="acc-b" id="advanced-b" role="region" aria-labelledby="advanced-h"><div class="acc-in">
+      <label class="row">Minimum confidence
+        <select id="conf"><option value="0">Any</option><option value="1">Nominal and high</option><option value="2">High only</option></select>
+      </label>
+      <label class="row">Area size
+        <select id="res"><option value="2">Wide (about 110 km)</option><option value="1">Fine (about 55 km)</option></select>
+      </label>
+      <div class="row">Hexagons in a country: show the top share of hotspots
+        <div id="hexpct" class="seg3" role="group" aria-label="Hexagon share"><button type="button" data-p="1" aria-pressed="false">1%</button><button type="button" data-p="10" aria-pressed="true">10%</button><button type="button" data-p="25" aria-pressed="false">25%</button></div>
+      </div>
+      </div></div>
+    </section>
+    <button id="clr" class="btn ghost small inline back" type="button" hidden>Back to overview</button>
+    <p id="subtext" class="subtext">Wildfires reshape air quality, ecosystems and the places people live. Seeing where and how often land burns helps communities and responders prepare, and combining MODIS and VIIRS keeps that picture consistent across the years.</p>
   </div>
 
-  <div id="settings-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="settings-tab" hidden>
-    <fieldset><legend>Map</legend>
-      <div class="seg3" id="vseg" role="group" aria-label="Map style">
-        <button type="button" data-v="heat" aria-pressed="true">Heat map</button>
-        <button type="button" data-v="hex" aria-pressed="false">Hexagon 3D</button>
-        <button type="button" data-v="raised" aria-pressed="false">Raised hotspots</button>
-      </div>
+  <div id="explore-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="explore-tab" hidden>
+    <section id="map-sec" class="acc open" aria-label="Map">
+      <button type="button" class="acc-h" id="map-sec-h" aria-expanded="true" aria-controls="map-sec-b"><span>Map</span><i aria-hidden="true"></i></button>
+      <div class="acc-b" id="map-sec-b" role="region" aria-labelledby="map-sec-h"><div class="acc-in">
+      <p class="hint">Overview shows the heat map. Select a country to see its region outlines (colored by frequency) and 3D hexagons.</p>
       <label class="row"><span><input type="checkbox" id="lite"> Low-end mode (lighter graphics)</span></label>
-    </fieldset>
-    <fieldset><legend>Sensors</legend>
-      <label><input type="checkbox" id="modis" checked> MODIS</label>
-      <label><input type="checkbox" id="viirs" checked> VIIRS</label>
-      <label class="row"><span><input type="checkbox" id="normalize" checked> Normalize VIIRS to MODIS</span></label>
-      <p id="normstatus" class="hint" aria-live="polite"></p>
-    </fieldset>
-    <fieldset><legend>Lighting</legend>
+      </div></div>
+    </section>
+    <div hidden>
+      <input type="checkbox" id="modis" checked><input type="checkbox" id="viirs" checked><input type="checkbox" id="normalize" checked><p id="normstatus"></p>
+    </div>
+    <section id="light-sec" class="acc open" aria-label="Lighting">
+      <button type="button" class="acc-h" id="light-sec-h" aria-expanded="true" aria-controls="light-sec-b"><span>Lighting</span><i aria-hidden="true"></i></button>
+      <div class="acc-b" id="light-sec-b" role="region" aria-labelledby="light-sec-h"><div class="acc-in">
       <div class="seg" role="group" aria-label="Lighting">
         <button type="button" data-mode="day" aria-pressed="false">Day</button>
         <button type="button" data-mode="night" aria-pressed="false">Night</button>
@@ -81,17 +120,12 @@
       </div>
       <p id="clock" class="hint clock" hidden></p>
       <button id="sunbtn" class="btn ghost small" hidden>Turn to the sun</button>
-    </fieldset>
-    <h2>Advanced Settings</h2>
-    <label class="row">Minimum confidence
-      <select id="conf"><option value="0">Any</option><option value="1">Nominal and high</option><option value="2">High only</option></select>
-    </label>
-    <label class="row">Area size
-      <select id="res"><option value="2">Wide (about 110 km)</option><option value="1">Fine (about 55 km)</option></select>
-    </label>
+      </div></div>
+    </section>
   </div>
 </aside>
 
+<div id="about-view" aria-hidden="true"></div>
 <div id="busy" class="glass busy" hidden><i class="spin"></i><span id="busytxt"></span></div>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
 <script type="module" src="app.js"></script>

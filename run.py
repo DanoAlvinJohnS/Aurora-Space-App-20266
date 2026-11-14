@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-step launcher for FireGlobe.   Usage:  python run.py   (or double-click)
+"""One-step launcher for TeraFlare.   Usage:  python run.py   (or double-click)
 
   1. installs the pip requirements automatically (requirements.txt)
   2. makes sure assets/countries.geojson exists (downloads it if missing)
@@ -17,7 +17,7 @@ GEO = ROOT / 'assets' / 'countries.geojson'
 GEO_URL = 'https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson'
 PKGS = {'numpy': 'numpy', 'pandas': 'pandas', 'shapely': 'shapely>=2.0'}
 
-def say(m): print(f'[FireGlobe] {m}', flush=True)
+def say(m): print(f'[TeraFlare] {m}', flush=True)
 
 def ensure_packages():
     """Install anything from requirements.txt that is missing or too old (no prompt)."""
@@ -55,7 +55,7 @@ def ensure_countries():
 def build_if_needed(force):
     bin_, js = DATA / 'fire.bin', DATA / 'fire.json'
     csvs = list(DATA.rglob('*.csv'))
-    if bin_.exists() and js.exists() and not force:
+    if bin_.exists() and js.exists() and (DATA / 'temp.json').exists() and not force:
         if not csvs or max(c.stat().st_mtime for c in csvs) <= min(bin_.stat().st_mtime, js.stat().st_mtime):
             say('Dataset summary is up to date.'); return True
         say('CSV files are newer than fire.bin, rebuilding ...')
