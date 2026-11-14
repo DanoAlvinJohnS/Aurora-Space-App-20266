@@ -59,10 +59,17 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
-      - name: Build Vercel production output
-        run: vercel build --prod
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Prepare Vercel static build output
+        shell: bash
+        run: |
+          mkdir -p .vercel/output/static
+          cp -a public/. .vercel/output/static/
+          printf '{"version":3}\n' > .vercel/output/config.json
+
+          test -s .vercel/output/static/index.html
+          test -s .vercel/output/static/dataset/fire.bin
+          test -s .vercel/output/static/dataset/fire.json
 
       - name: Deploy to Vercel production
         run: vercel deploy --prebuilt --prod --yes
