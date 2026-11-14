@@ -145,11 +145,11 @@ Raw CSVs are **not** committed (too large). Download them from [FIRMS](https://f
 
 # 2. Build the compact summary (once; re-run when CSVs change)
 pip install numpy pandas shapely
-python3 preprocess.py
+python3 preprocess.py 
 
 # 3. Serve the folder and open it
 python3 -m http.server
-# visit http://localhost:8000
+# visit http://localhost:8000 | Temporarily
 ```
 
 The page needs `dataset/fire.bin` and `dataset/fire.json`. If they are missing, the app should show a clear message explaining how to generate them.
@@ -168,6 +168,7 @@ The repository includes a minimal working scaffold for the app and the expected 
 ├── app.js              # Globe, heat map, hexagons, panels, animation
 ├── style.css           # Glass UI styling
 ├── preprocess.py       # CSV → fire.bin + fire.json
+├── download_firms.bat  # Fetch Datasets  
 ├── assets/
 │   └── countries.geojson
 └── dataset/
@@ -203,10 +204,10 @@ Being honest about what the numbers mean:
 - [x] Historical progression (time slider, play, cumulative)
 - [x] Heat map and 3D hexagon views, country drill-down, per-location history
 - [x] Animation and low-end optimization
+- [x] Automated Import CSV files using .bat
 - [ ] Sensor-overlap normalization (use the shared 2012+ period to calibrate)
 - [ ] Anomaly highlighting ("unusual conditions" vs. a location's baseline)
 - [ ] Area-of-interest selection finer than country (draw a region)
 - [ ] Potential **fire-spread** view when a hotspot ignites
 - [ ] Local **vegetation and terrain** context around hotspots
 - [ ] Export (CSV / image) for reports
-- [ ] Solution 2: RTS / roguelike prevention game concept
