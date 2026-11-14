@@ -6,6 +6,8 @@ Built for the **NASA Space Apps Challenge: "Harmonization of MODIS and VIIRS Hot
 
 > Everything runs in the browser. No backend, no accounts, and your data never leaves your computer.
 
+This repository includes a lightweight project scaffold and a clear local setup path so the concept can be opened and developed without committing the large FIRMS datasets.
+
 ---
 
 ## Table of contents
@@ -150,18 +152,21 @@ python3 -m http.server
 # visit http://localhost:8000
 ```
 
-The page needs `dataset/fire.bin` and `dataset/fire.json`. If they are missing it tells you what to do.
+The page needs `dataset/fire.bin` and `dataset/fire.json`. If they are missing, the app should show a clear message explaining how to generate them.
 
 Optional: put higher-resolution `earth-day.jpg`, `earth-night.jpg` and `earth-topology.png` in `assets/`.
 
 ## Project structure
 
-```
-fireglobe/
-├── index.html          # globe page, options, timeline
-├── about.html          # about page
-├── app.js              # globe, heat map, hexagons, panels, animation
-├── style.css           # glass UI styling
+The repository includes a minimal working scaffold for the app and the expected data folders used by the project.
+
+```text
+.
+├── README.MD           # Project overview and local setup notes
+├── index.html          # Globe page, options, timeline
+├── about.html          # About page
+├── app.js              # Globe, heat map, hexagons, panels, animation
+├── style.css           # Glass UI styling
 ├── preprocess.py       # CSV → fire.bin + fire.json
 ├── assets/
 │   └── countries.geojson
@@ -171,6 +176,8 @@ fireglobe/
     ├── fire.bin        # generated
     └── fire.json       # generated
 ```
+
+This layout keeps the generated data and source assets separate, while making the repository easier to manage without committing the large NASA FIRMS archives.
 
 ## Performance and low-end devices
 
