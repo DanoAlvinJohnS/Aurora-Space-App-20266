@@ -1,0 +1,2 @@
+Put your FIRMS CSV files here (MODIS and VIIRS, subfolders are fine).
+FireGlobe finds them automatically when the page loads.
