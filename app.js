@@ -397,14 +397,15 @@ const CSS_UI = `.sk{display:block;height:14px;border-radius:10px;margin:10px 0;b
 .sk.c{width:54px;height:54px;border-radius:50%}.sk.s{width:60%}.sk.b{height:70px;border-radius:16px}
 .skrow{display:flex;gap:10px;justify-content:center;margin:12px 0}.skrow .sk{width:46px;height:46px;border-radius:50%;margin:0}
 @keyframes shim{to{background-position:-200% 0}}
-.busy{position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.busy{position:fixed;top:18px;left:calc(50% + var(--sbw,0px)/2);transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
 .busy[hidden]{display:none}.busy.on{opacity:1}
 .spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#a855f7;border-radius:50%;animation:rot .7s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
 .progress.ind i{width:40%!important;animation:ind 1s ease-in-out infinite alternate}
 @keyframes ind{from{margin-left:0}to{margin-left:60%}}
-.here{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:10px;align-items:baseline;padding:6px 18px;border-radius:999px;color:#f5f0ff;font:inherit;font-size:13px;cursor:pointer}
+.here{position:fixed;bottom:18px;left:calc(50% + var(--sbw,0px)/2);transform:translateX(-50%);z-index:4;display:flex;gap:10px;align-items:baseline;padding:6px 18px;border-radius:999px;color:#f5f0ff;font:inherit;font-size:13px;cursor:pointer}
 .here b{font-size:15px}.here span{color:#b4a7d6;font-size:12px}.here[hidden]{display:none}
+@media(max-width:700px){.here,.busy{left:50%}}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-corner{background:transparent}::-webkit-scrollbar-button{display:none}
 ::-webkit-scrollbar-thumb{background:linear-gradient(#a855f7,#6d28d9);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
 ::-webkit-scrollbar-thumb:hover{background:linear-gradient(#c084fc,#7c3aed);background-clip:padding-box}
@@ -629,6 +630,50 @@ function detail() {
 }
 
 /* ---------- wiring ---------- */
+/* ---------- sidebar: tabs, collapse, resize ---------- */
+const sidebar = $('#controls'), resizeHandle = $('#resize-handle');
+function syncSidebar() {                               // publish the sidebar width so the floating pills and the resize handle follow it
+  const w = sidebar.hidden ? 0 : sidebar.getBoundingClientRect().width;
+  document.documentElement.style.setProperty('--sbw', w + 'px');
+  resizeHandle.hidden = sidebar.hidden || sidebar.classList.contains('is-collapsed');
+}
+new ResizeObserver(syncSidebar).observe(sidebar);
+function activateSidebarTab(name) {
+  const dash = name === 'dashboard';
+  $('#dashboard-tab').setAttribute('aria-selected', dash);
+  $('#settings-tab').setAttribute('aria-selected', !dash);
+  $('#dashboard-panel').hidden = !dash;
+  $('#settings-panel').hidden = dash;
+}
+document.querySelectorAll('.sidebar-tabs [role="tab"]').forEach(b => b.onclick = () => activateSidebarTab(b.id === 'dashboard-tab' ? 'dashboard' : 'settings'));
+let expandedSidebarWidth = '';
+$('#collapse').onclick = () => {
+  const collapsed = sidebar.classList.toggle('is-collapsed');
+  if (collapsed) { expandedSidebarWidth = sidebar.style.width; sidebar.style.width = '58px'; }
+  else sidebar.style.width = expandedSidebarWidth;
+  $('#collapse').setAttribute('aria-expanded', !collapsed);
+  $('#collapse').setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+  syncSidebar();
+};
+function resizeSidebar(width) {
+  const st = getComputedStyle(sidebar), min = Math.max(220, parseFloat(st.minWidth) || 0), max = parseFloat(st.maxWidth) || innerWidth;
+  sidebar.style.width = `${Math.max(min, Math.min(max, width))}px`;
+  syncSidebar();
+}
+resizeHandle.addEventListener('pointerdown', e => {
+  if (sidebar.classList.contains('is-collapsed')) return;
+  e.preventDefault();
+  const startX = e.clientX, startWidth = sidebar.getBoundingClientRect().width;
+  resizeHandle.setPointerCapture(e.pointerId);
+  const move = ev => resizeSidebar(startWidth + ev.clientX - startX);
+  const stop = () => { resizeHandle.removeEventListener('pointermove', move); resizeHandle.removeEventListener('pointerup', stop); resizeHandle.removeEventListener('pointercancel', stop); };
+  resizeHandle.addEventListener('pointermove', move); resizeHandle.addEventListener('pointerup', stop); resizeHandle.addEventListener('pointercancel', stop);
+});
+resizeHandle.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); resizeSidebar(sidebar.getBoundingClientRect().width + (e.key === 'ArrowRight' ? 16 : -16)); }
+});
+addEventListener('resize', syncSidebar);
+
 $('#clist').onclick = e => { const b = e.target.closest('.ci'); if (b) pick(+b.dataset.i); };
 $('#csearch').addEventListener('input', list);
 addEventListener('keydown', e => { if (e.key === 'Escape' && sel >= 0) clear(); });
