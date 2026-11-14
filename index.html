@@ -16,25 +16,23 @@
 
 <section id="loading" class="glass card center" hidden>
   <h1>Loading fire data</h1>
-  <p id="lmsg">Looking for CSV files in /dataset …</p>
+  <p id="lmsg">Reading the prepared dataset …</p>
   <div class="progress"><i id="lbar"></i></div>
   <p id="ldetail" class="hint"></p>
 </section>
 
-<section id="drop" class="glass card center" hidden>
-  <h1>Upload your hotspot CSV</h1>
-  <p id="dropmsg">Drop a NASA FIRMS active fire file here, or choose one from your computer. MODIS and VIIRS files both work, and you can add several one after the other.</p>
-  <button id="pick" class="btn">Choose CSV file</button>
-  <p id="err" class="err" role="alert"></p>
-  <p class="hint">Needs the columns latitude, longitude and acq_date. Big datasets are thinned evenly so the globe stays smooth.</p>
-</section>
-<input id="file" type="file" accept=".csv,text/csv" multiple hidden>
-
-<aside id="controls" class="glass card side left" hidden>
+<!-- LEFT: status, data and graphs -->
+<aside id="status" class="glass card side left" hidden>
   <h2>Burning activity</h2>
   <p class="big"><span id="count">0</span> detections shown</p>
-  <p id="sample" class="hint" hidden></p>
+  <p id="meta" class="hint"></p>
+  <div class="legend"><span>Rarely burns</span><i></i><span>Burns often</span></div>
+  <div id="detail"></div>
+</aside>
 
+<!-- RIGHT: options slide-bar -->
+<aside id="controls" class="glass card side right" hidden>
+  <h2>Options</h2>
   <fieldset><legend>Lighting</legend>
     <div class="seg" role="group" aria-label="Lighting">
       <button type="button" data-mode="day" aria-pressed="false">Day</button>
@@ -44,25 +42,23 @@
     <p id="clock" class="hint clock" hidden></p>
     <button id="sunbtn" class="btn ghost small" hidden>Turn to the sun</button>
   </fieldset>
-
+  <fieldset><legend>Map</legend>
+    <div class="seg2" id="vseg"><button type="button" data-v="heat" aria-pressed="true">Heat map</button><button type="button" data-v="hex" aria-pressed="false">Hexagon 3D</button></div>
+    <label class="row"><span><input type="checkbox" id="lite"> Low-end mode (lighter graphics)</span></label>
+  </fieldset>
   <fieldset><legend>Sensors</legend>
     <label><input type="checkbox" id="modis" checked> MODIS</label>
     <label><input type="checkbox" id="viirs" checked> VIIRS</label>
   </fieldset>
   <label class="row">Minimum confidence
-    <select id="conf"><option value="0">Any</option><option value="30">Nominal and high</option><option value="80">High only</option></select>
+    <select id="conf"><option value="0">Any</option><option value="1">Nominal and high</option><option value="2">High only</option></select>
   </label>
   <label class="row">Area size
-    <select id="res"><option value="3">Wide (about 125 km)</option><option value="4">Fine (about 50 km)</option></select>
+    <select id="res"><option value="2">Wide (about 110 km)</option><option value="1">Fine (about 55 km)</option></select>
   </label>
-  <div class="legend"><span>Rarely burns</span><i></i><span>Burns often</span></div>
-  <p class="hint">Taller, deeper columns mean more detections in that area. Click one to open its wildfire history.</p>
-  <button id="again" class="btn ghost">Add another CSV</button>
-</aside>
-
-<aside id="info" class="glass card side right" hidden>
-  <button id="close" class="x" aria-label="Close">×</button>
-  <div id="infobody"></div>
+  <h3>Countries</h3>
+  <input id="csearch" type="search" placeholder="Search a country" aria-label="Search a country">
+  <div id="clist" class="list"></div>
 </aside>
 
 <section id="timeline" class="glass tl" hidden>
