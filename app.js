@@ -17,6 +17,7 @@ let lite = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory 
 let tab = 'stats', loc = null, view = 'heat', gf = 0, prev = new Map(), cur = [], rk = [], anim = 0;
 const HEX_LIMIT = 6000, LOW_HEX_LIMIT = 2000, HEAT_LIMIT = 2000;
 let light = 'live', mat = null, T = null, sun = { lat: 0, lng: 0 };
+let aoi = null, aoiDrawing = false, aoiStart = null, countryFeatures = [], aoiAutoRotate = false;
 
 /* ---------- globe: one merged mesh for all columns, country polygons on top ---------- */
 const globe = Globe()($('#globe'))
@@ -36,7 +37,7 @@ const globe = Globe()($('#globe'))
   .ringColor(() => t => `rgba(255,200,80,${1 - t})`).ringMaxRadius(2.5).ringPropagationSpeed(1.5).ringRepeatPeriod(1400)
   .onPointClick(p => p && locAt(p.lat, p.lng))
   .polygonAltitude(0.004).polygonSideColor(() => 'rgba(0,0,0,0)').polygonsTransitionDuration(0)
-  .onPolygonClick((p, _e, c) => p && (p.__i === sel && c ? locAt(c.lat, c.lng) : pick(p.__i)));
+  .onPolygonClick((p, _e, c) => p && !p.__aoi && (p.__i === sel && c ? locAt(c.lat, c.lng) : pick(p.__i)));
 
 globe.controls().autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches && !lite;
 globe.controls().autoRotateSpeed = 0.4;
@@ -190,7 +191,8 @@ async function boot() {
     let gj; try { gj = await (await fetch('assets/countries.geojson')).json(); }
     catch (e) { gj = await (await fetch('https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')).json(); }
     gj.features.forEach((f, i) => f.__i = i);
-    paint(); globe.polygonsData(gj.features);
+    countryFeatures = gj.features;
+    paint(); globe.polygonsData(countryFeatures);
   } catch (e) {
     console.warn(e);
     $('#lmsg').innerHTML = 'Prepared data not found. Put your FIRMS CSVs in <b>/dataset</b>, run <code>python3 preprocess.py</code> once, then serve this folder (for example <code>python3 -m http.server</code>) and reload.';
@@ -199,7 +201,7 @@ async function boot() {
   const yr = $('#year'); yr.min = M.years[0]; yr.max = M.years[1]; yr.value = M.years[1];
   $('#meta').textContent = `${M.rows.toLocaleString()} detections, ${cached ? 'loaded from cache' : 'downloaded'} in ${((performance.now() - t0) / 1000).toFixed(1)} s`;
   $('#loading').hidden = true;
-  ['#status', '#controls', '#timeline'].forEach(s => $(s).hidden = false);
+  ['#controls', '#timeline'].forEach(s => $(s).hidden = false);
   configureOverlap();
   $('#lite').checked = lite; if (lite) $('#res').value = '2'; setView(view);
   detail(); draw();
@@ -270,10 +272,17 @@ function countryMetrics(country) {
   };
 }
 
+function cellInAoi(cell) {
+  const iy = (cell / M.nx) | 0, ix = cell - iy * M.nx;
+  const lat = 90 - (iy + .5) * 180 / M.ny;
+  const lng = -180 + (ix + .5) * 360 / M.nx;
+  return lat >= aoi.south && lat <= aoi.north && lng >= aoi.west && lng <= aoi.east;
+}
+
 function agg() {
   const res = sel >= 0 ? 1 : +$('#res').value, end = +$('#year').value - M.y0, cum = $('#cum').checked, mc = +$('#conf').value;
   const s0 = $('#modis').checked, s1 = $('#viirs').checked, scale = overlapScale(mc);
-  const k = [res, sel, end, +cum, mc, +s0, +s1, scale].join();
+  const k = [res, sel, end, +cum, mc, +s0, +s1, scale, aoi ? `${aoi.south},${aoi.west},${aoi.north},${aoi.east}` : ''].join();
   let r = memo.get(k); if (r) { ref = r.ref; return r; }
   const map = gmap(res), W = M.nx / res, grid = new Float32Array(W * (M.ny / res));
   const cellCounts = new Float32Array(NC), cs = new Float64Array(countries.length);
@@ -282,6 +291,7 @@ function agg() {
     const y = YR[i]; if (y > end || (!cum && y !== end) || CB[i] < mc || !(SN[i] ? s1 : s0)) continue;
     const c = CNT[i] * (SN[i] ? scale : 1), cell = CELL[i], o = CC[cell];
     if (o === 255) continue;
+    if (aoi && !cellInAoi(cell)) continue;
     cs[o] += c;
     if (sel >= 0 && o !== sel) continue;
     total += c;
@@ -363,9 +373,107 @@ const redraw = () => {
 /* ---------- countries: everything but the selected one fades to grey ---------- */
 function paint() {
   const g = (gf * .8).toFixed(2);
-  globe.polygonCapColor(p => p.__i === sel ? 'rgba(0,0,0,0)' : `rgba(64,64,70,${g})`)
-    .polygonStrokeColor(p => p.__i === sel ? '#ffb366' : 'rgba(255,255,255,.18)');
+  globe.polygonCapColor(p => p.__aoi ? 'rgba(0,0,0,0)' : p.__i === sel ? 'rgba(0,0,0,0)' : `rgba(64,64,70,${g})`)
+    .polygonStrokeColor(p => p.__aoi ? '#ffb366' : p.__i === sel ? '#ffb366' : 'rgba(255,255,255,.18)');
 }
+function aoiFeature() {
+  if (!aoi) return null;
+  const { west, east, south, north } = aoi;
+  return {
+    __aoi: true,
+    geometry: { type: 'Polygon', coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]] },
+    type: 'Feature',
+  };
+}
+function renderAoi() {
+  const feature = aoiFeature();
+  globe.polygonsData(feature ? countryFeatures.concat(feature) : countryFeatures);
+  paint();
+  $('#clear-aoi').hidden = !aoi;
+  $('#aoi-status').textContent = aoi
+    ? `Region: ${aoi.south.toFixed(1)} to ${aoi.north.toFixed(1)} deg latitude, ${aoi.west.toFixed(1)} to ${aoi.east.toFixed(1)} deg longitude.`
+    : 'Draw a rectangle on the globe to limit the search.';
+}
+function focusAoi() {
+  const { west, east, south, north } = aoi;
+  const span = Math.max(east - west, north - south);
+  const altitude = Math.max(.45, Math.min(2.2, span / 70));
+  globe.controls().autoRotate = false;
+  globe.pointOfView({
+    lat: (south + north) / 2,
+    lng: (west + east) / 2,
+    altitude,
+  }, lite ? 0 : 900);
+}
+function globePoint(event) {
+  const point = globe.toGlobeCoords(event.clientX, event.clientY);
+  return point && Number.isFinite(point.lat) && Number.isFinite(point.lng) ? point : null;
+}
+function finishAoiDraw() {
+  if (!aoiDrawing) return;
+  aoiDrawing = false;
+  aoiStart = null;
+  $('#globe').classList.remove('aoi-drawing');
+  globe.controls().enabled = true;
+  globe.controls().autoRotate = aoiAutoRotate;
+}
+function setAoi(start, end) {
+  const west = Math.min(start.lng, end.lng), east = Math.max(start.lng, end.lng);
+  const south = Math.min(start.lat, end.lat), north = Math.max(start.lat, end.lat);
+  if (east - west < 1 || north - south < 1) {
+    $('#aoi-status').textContent = 'Draw a larger rectangle to select a region.';
+    return;
+  }
+  aoi = { west, east, south, north };
+  TOP.clear();
+  renderAoi();
+  focusAoi();
+  redraw();
+}
+$('#draw-aoi').onclick = () => {
+  aoiDrawing = true;
+  aoiStart = null;
+  $('#globe').classList.add('aoi-drawing');
+  $('#aoi-status').textContent = 'Drag across the globe to draw a region.';
+  aoiAutoRotate = globe.controls().autoRotate;
+  globe.controls().autoRotate = false;
+  globe.controls().enabled = false;
+};
+$('#clear-aoi').onclick = () => {
+  finishAoiDraw();
+  aoi = null;
+  TOP.clear();
+  renderAoi();
+  redraw();
+};
+$('#globe').addEventListener('pointerdown', event => {
+  if (!aoiDrawing) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const point = globePoint(event);
+  if (!point) return;
+  aoiStart = point;
+  $('#globe').setPointerCapture(event.pointerId);
+}, true);
+$('#globe').addEventListener('pointermove', event => {
+  if (!aoiDrawing) return;
+  event.preventDefault();
+  event.stopPropagation();
+}, true);
+$('#globe').addEventListener('pointerup', event => {
+  if (!aoiDrawing || !aoiStart) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const point = globePoint(event);
+  if (point) setAoi(aoiStart, point);
+  finishAoiDraw();
+}, true);
+$('#globe').addEventListener('pointercancel', event => {
+  if (!aoiDrawing) return;
+  event.preventDefault();
+  event.stopPropagation();
+  finishAoiDraw();
+}, true);
 function fadeTo(t) {
   if (lite) { gf = t; return paint(); }
   const a = gf, t0 = performance.now();
@@ -393,7 +501,7 @@ function tops() {                                  // busiest 1-degree areas of 
   if (TOP.has(sel)) return TOP.get(sel);
   const m = new Map(), W = M.nx, H = W >> 1;
   const scale = overlapScale(0);
-  for (let i = 0; i < N; i++) { const cell = CELL[i]; if (CC[cell] !== sel) continue; const iy = (cell / W) | 0, k = (iy >> 1) * H + ((cell - iy * W) >> 1); m.set(k, (m.get(k) || 0) + CNT[i] * (SN[i] ? scale : 1)); }
+  for (let i = 0; i < N; i++) { const cell = CELL[i]; if (CC[cell] !== sel || (aoi && !cellInAoi(cell))) continue; const iy = (cell / W) | 0, k = (iy >> 1) * H + ((cell - iy * W) >> 1); m.set(k, (m.get(k) || 0) + CNT[i] * (SN[i] ? scale : 1)); }
   const r = [...m].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => { const by = (k / H) | 0; return { lat: 90 - by - .5, lng: -180 + (k - by * H) + .5, n }; });
   TOP.set(sel, r); return r;
 }
@@ -428,6 +536,56 @@ function detail() {
 }
 
 /* ---------- wiring ---------- */
+function activateSidebarTab(name) {
+  const dashboard = name === 'dashboard';
+  $('#dashboard-tab').setAttribute('aria-selected', dashboard);
+  $('#settings-tab').setAttribute('aria-selected', !dashboard);
+  $('#dashboard-panel').hidden = !dashboard;
+  $('#settings-panel').hidden = dashboard;
+}
+document.querySelectorAll('.sidebar-tabs [role="tab"]').forEach(button => {
+  button.onclick = () => activateSidebarTab(button.id === 'dashboard-tab' ? 'dashboard' : 'settings');
+});
+let expandedSidebarWidth = '';
+$('#collapse').onclick = () => {
+  const collapsed = $('#controls').classList.toggle('is-collapsed');
+  if (collapsed) {
+    expandedSidebarWidth = $('#controls').style.width;
+    $('#controls').style.width = '58px';
+  } else {
+    $('#controls').style.width = expandedSidebarWidth;
+  }
+  $('#collapse').setAttribute('aria-expanded', !collapsed);
+  $('#collapse').setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+};
+const resizeHandle = $('#resize-handle');
+function resizeSidebar(width) {
+  const styles = getComputedStyle($('#controls'));
+  const min = Math.max(220, parseFloat(styles.minWidth) || 0);
+  const max = parseFloat(styles.maxWidth) || innerWidth;
+  $('#controls').style.width = `${Math.max(min, Math.min(max, width))}px`;
+}
+resizeHandle.addEventListener('pointerdown', e => {
+  if ($('#controls').classList.contains('is-collapsed')) return;
+  e.preventDefault();
+  const startX = e.clientX, startWidth = $('#controls').getBoundingClientRect().width;
+  resizeHandle.setPointerCapture(e.pointerId);
+  const move = event => resizeSidebar(startWidth + event.clientX - startX);
+  const stop = () => {
+    resizeHandle.removeEventListener('pointermove', move);
+    resizeHandle.removeEventListener('pointerup', stop);
+    resizeHandle.removeEventListener('pointercancel', stop);
+  };
+  resizeHandle.addEventListener('pointermove', move);
+  resizeHandle.addEventListener('pointerup', stop);
+  resizeHandle.addEventListener('pointercancel', stop);
+});
+resizeHandle.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    e.preventDefault();
+    resizeSidebar($('#controls').getBoundingClientRect().width + (e.key === 'ArrowRight' ? 16 : -16));
+  }
+});
 $('#clist').onclick = e => { const b = e.target.closest('.ci'); if (b) pick(+b.dataset.i); };
 $('#csearch').addEventListener('input', list);
 addEventListener('keydown', e => { if (e.key === 'Escape' && sel >= 0) clear(); });

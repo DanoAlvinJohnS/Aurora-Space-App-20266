@@ -100,6 +100,7 @@ Click a country and every other country fades to grey. A panel with three tabs o
 - Optional VIIRS-to-MODIS overlap normalization using the shared 2012+ period
 - Minimum confidence: Any / Nominal and high / High only
 - Area size: Wide (~110 km) / Fine (~55 km)
+- Area-of-interest selection by drawing a region on the globe; the selected region is applied to search results and can be cleared from View settings
 - Country search
 - **Low-end mode** (auto-detected, can be toggled)
 
@@ -157,6 +158,23 @@ python3 preprocess.py
 # 4. Serve the folder and open it
 python3 -m http.server
 # visit http://localhost:8000
+```
+
+```bash
+# Sequence
+DL Dataset > Preprocess Dataset > Run app
+Do on terminal ng vscode
+
+# 1. Download datasets
+python download_firms.py
+python download_firms.py --start 2015 --end 2025
+python download_firms.py --sources MODIS_SP VIIRS_SNPP_SP
+
+# 2. Preprocess
+python preprocess.py
+
+# 3. Run
+python run.py
 ```
 
 On Windows, if `python3` is not available, use `python` instead:
@@ -231,7 +249,7 @@ Being honest about what the numbers mean:
 - [x] Animation and low-end optimization
 - [x] Sensor-overlap normalization using the shared 2012+ period (requires both sensors in the input data)
 - [ ] Anomaly highlighting ("unusual conditions" vs. a location's baseline)
-- [ ] Area-of-interest selection finer than country (draw a region)
+- [x] Area-of-interest selection finer than country (draw a region)
 - [ ] Potential **fire-spread** view when a hotspot ignites
 - [ ] Local **vegetation and terrain** context around hotspots
 - [ ] Export (CSV / image) for reports
