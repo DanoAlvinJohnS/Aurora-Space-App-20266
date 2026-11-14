@@ -58,8 +58,8 @@ select{background:rgba(0,0,0,.35);color:var(--ink);border:1px solid var(--line);
 .bars i.peak{background:linear-gradient(#ffe08a,#ff9a3c)}
 .bars.m{height:46px}
 .axis.months span{width:calc(100%/12);text-align:center}
-.evt{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:13px}
-.evt span:first-child{flex:1}.evt .hint{font-size:12px;min-width:70px;text-align:right}
+.evt{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:16px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+.evt span:first-child{min-width:0}.evt span:last-child{text-align:right;white-space:nowrap}.evt .hint{font-size:12px;min-width:70px;text-align:right}
 code{background:rgba(0,0,0,.35);padding:1px 6px;border-radius:6px;font-size:13px}
 
 /* --- country list, selection --- */
@@ -82,3 +82,13 @@ code{background:rgba(0,0,0,.35);padding:1px 6px;border-radius:6px;font-size:13px
 .tabs button{background:none;border:0;color:var(--mute);font:inherit;font-size:13px;padding:6px 2px;border-radius:9px;cursor:pointer}
 .tabs button.on{background:linear-gradient(135deg,#ff9a3c,#e8350f);color:#fff;font-weight:700}
 .bars i[data-y]{cursor:pointer}
+
+/* Keep dynamically-created controls themed instead of showing browser defaults. */
+button{font-family:inherit}
+.tabs button,.seg button,.seg2 button,.ci,.tile{
+ appearance:none;-webkit-appearance:none;background-color:transparent
+}
+.tabs button,.seg button,.seg2 button{color:var(--mute)}
+.tabs button.on,.seg button[aria-pressed=true],.seg2 button[aria-pressed=true]{color:#fff}
+.ci{gap:12px;align-items:center;border-radius:8px}
+.ci .hint{flex:0 0 auto;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.07)}

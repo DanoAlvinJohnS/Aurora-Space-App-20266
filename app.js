@@ -34,10 +34,15 @@ globe.controls().autoRotateSpeed = 0.4;
 const fit = () => { globe.renderer().setPixelRatio(lite ? 1 : Math.min(devicePixelRatio || 1, 1.5)); globe.width(innerWidth).height(innerHeight); };
 addEventListener('resize', fit); fit();
 
-function level(w) { return Math.min(1, Math.log(1 + w) / Math.log(1 + ref)); }
+function level(w) {
+  const scale = Math.log1p(ref);
+  if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(scale) || scale <= 0) return 0;
+  return Math.max(0, Math.min(1, Math.log1p(w) / scale));
+}
 const color = w => colorL(level(w));
 function colorL(l) {
-  const x = l * (STOPS.length - 1), i = Math.min(Math.floor(x), STOPS.length - 2), f = x - i;
+  const value = Number.isFinite(l) ? Math.max(0, Math.min(1, l)) : 0;
+  const x = value * (STOPS.length - 1), i = Math.min(Math.floor(x), STOPS.length - 2), f = x - i;
   return `rgb(${STOPS[i].map((v, k) => Math.round(v + (STOPS[i + 1][k] - v) * f))})`;
 }
 
@@ -122,8 +127,8 @@ function sunPos(date) {                                  // sub-solar point from
 function updateSun() {
   const now = new Date(); sun = sunPos(now);
   if (mat) mat.uniforms.sun.value.set(sun.lat * Math.PI / 180, sun.lng * Math.PI / 180);
-  const f = (v, a, b) => `${Math.abs(v).toFixed(0)}Â°${v >= 0 ? a : b}`;
-  $('#clock').textContent = `${now.toISOString().slice(11, 16)} UTC Â· sun is overhead near ${f(sun.lat, 'N', 'S')}, ${f(sun.lng, 'E', 'W')}`;
+  const f = (v, a, b) => `${Math.abs(v).toFixed(0)} deg ${v >= 0 ? a : b}`;
+  $('#clock').textContent = `${now.toISOString().slice(11, 16)} UTC - sun is overhead near ${f(sun.lat, 'N', 'S')}, ${f(sun.lng, 'E', 'W')}`;
 }
 
 function setLighting(m) {
@@ -275,7 +280,7 @@ function draw() {
   const r = agg(), y = $('#year').value, y0 = M.years[0];
   prev = new Map(cur.map(q => [q.i, q])); cur = r.pts; cur.res = r.res; run();
   $('#count').textContent = r.total.toLocaleString();
-  $('#yl').textContent = $('#cum').checked && +y > y0 ? `${y0}â€“${y}` : y;
+  $('#yl').textContent = $('#cum').checked && +y > y0 ? `${y0}-${y}` : y;
   rk = []; countries.forEach((c, i) => r.cs[i] > 0 && rk.push([i, r.cs[i]])); rk.sort((a, b) => b[1] - a[1]);
   const L = (e, t, col) => ({ lat: countries[e[0]].lat, lng: countries[e[0]].lng, text: t + countries[e[0]].name, color: col });
   globe.labelsData(sel < 0 && rk.length > 1 ? [L(rk[0], 'Highest: ', '#ffe08a'), L(rk[rk.length - 1], 'Lowest: ', '#9fd0ff')] : []);
@@ -340,11 +345,11 @@ function detail() {
   let body;
   if (tab === 'stats') body = `<div class="stats"><div><b>${tot.toLocaleString()}</b>detections</div><div><b>${y0 + c.y.indexOf(top)}</b>peak year</div><div><b>${MON[c.m.indexOf(mt)]}</b>busiest month</div></div>
     ${row('Shown with current filters', `<b>${agg().cs[sel].toLocaleString()}</b>`)}${row('MODIS / VIIRS', `${c.s[0].toLocaleString()} / ${c.s[1].toLocaleString()}`)}
-    ${row('Seen by day / night', dn ? `${Math.round(c.dn[0] / dn * 100)}% / ${Math.round(c.dn[1] / dn * 100)}%` : 'â€“')}
+    ${row('Seen by day / night', dn ? `${Math.round(c.dn[0] / dn * 100)}% / ${Math.round(c.dn[1] / dn * 100)}%` : 'N/A')}
     <p class="hint">Totals cover all sensors and confidence levels.</p>`;
   else if (tab === 'hist') body = `<h3>Per year (click a bar)</h3>${bars(c.y, i => y0 + i, '', 'data-y')}${yaxis}<h3>Seasonality</h3>${bars(c.m, i => MON[i], 'm')}<div class="axis months">${MON.map(m => `<span>${m[0]}</span>`).join('')}</div>`;
-  else body = `<h3>Hotspot areas (about 100 km)</h3>${tops().map(p => `<button class="ci" data-l="${p.lat},${p.lng}"><span>${p.lat.toFixed(1)}Â°, ${p.lng.toFixed(1)}Â°</span><span class="hint">${p.n.toLocaleString()}</span></button>`).join('') || '<p class="hint">None.</p>'}
-    ${loc ? `<h3>Area ${loc.lat.toFixed(1)}Â°, ${loc.lng.toFixed(1)}Â° per year</h3>${bars(loc.a, i => y0 + i, '', '')}${yaxis}` : '<p class="hint">Or click anywhere inside the country to inspect that spot.</p>'}`;
+  else body = `<h3>Hotspot areas (about 100 km)</h3>${tops().map(p => `<button class="ci" data-l="${p.lat},${p.lng}"><span>${p.lat.toFixed(1)}, ${p.lng.toFixed(1)}</span><span class="hint">${p.n.toLocaleString()}</span></button>`).join('') || '<p class="hint">None.</p>'}
+    ${loc ? `<h3>Area ${loc.lat.toFixed(1)}, ${loc.lng.toFixed(1)} per year</h3>${bars(loc.a, i => y0 + i, '', '')}${yaxis}` : '<p class="hint">Or click anywhere inside the country to inspect that spot.</p>'}`;
   box.innerHTML = `<p class="name">${c.name}</p><div class="tabs">${TABS.map(([k, l]) => `<button data-t="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>${body}${back}`;
 }
 
