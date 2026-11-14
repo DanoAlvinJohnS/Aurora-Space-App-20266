@@ -13,9 +13,9 @@ const STOPS = [[255,224,138],[255,138,26],[214,18,40],[122,0,25]];
 const ATMO = { day: '#7db4ff', night: '#4d5f9a', live: '#6c9cf5' };
 
 let ref = 1, timer = null, raf = 0, drawTimer = null, sel = -1;
-let lite = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 8) <= 4;   // low-end guess, user can toggle
+let lite = (() => { try { return localStorage.getItem('fg-lite') !== '0'; } catch (e) { return true; } })();   // low-end mode is ON by default; the choice is remembered
 let tab = 'stats', loc = null, view = 'heat', gf = 0, prev = new Map(), cur = [], rk = [], anim = 0;
-const HEX_LIMIT = 6000, LOW_HEX_LIMIT = 2000, HEAT_LIMIT = 2000;
+const HEX_LIMIT = 6000, LOW_HEX_LIMIT = 2000, HEAT_LIMIT = 1200, LOW_HEAT_LIMIT = 450;
 let light = 'live', mat = null, T = null, sun = { lat: 0, lng: 0 };
 let aoi = null, aoiDrawing = false, aoiStart = null, countryFeatures = [], aoiAutoRotate = false;
 
@@ -64,17 +64,20 @@ uniform sampler2D dayTex, nightTex, topoTex;
 uniform vec2 sun;        // sub-solar latitude, longitude (radians)
 uniform float mode;      // 0 night, 1 day, 2 live
 uniform float relief;
+uniform sampler2D maskTex;
+uniform float maskAmt;   // 0 = normal, 1 = everything outside the selected country is blurred and darkened
 varying vec2 vUv;
 void main(){
   float lng = (vUv.x * 2.0 - 1.0) * 3.14159265;
   float lat = (vUv.y - 0.5) * 3.14159265;
+  float mk = texture2D(maskTex, vUv).r * maskAmt, bias = mk * 4.0;
   float cosz = sin(lat) * sin(sun.x) + cos(lat) * cos(sun.x) * cos(lng - sun.y);
 
-  vec3 day = texture2D(dayTex, vUv).rgb;
+  vec3 day = texture2D(dayTex, vUv, bias).rgb;
   float h = (texture2D(topoTex, vUv + vec2(0.0008, 0.0)).r - texture2D(topoTex, vUv - vec2(0.0008, 0.0)).r);
   day *= clamp(1.0 + h * relief, 0.8, 1.2);
 
-  vec3 night = texture2D(nightTex, vUv).rgb;
+  vec3 night = texture2D(nightTex, vUv, bias).rgb;
   vec3 nightCol = night * 1.25 + day * 0.035;
 
   vec3 dayCol = day;
@@ -84,7 +87,9 @@ void main(){
     dayCol = day * mix(0.55, 1.0, smoothstep(0.0, 0.55, cosz));
     dayCol += vec3(1.0, 0.42, 0.15) * exp(-pow(cosz / 0.09, 2.0)) * 0.14;   // warm twilight band
   }
-  gl_FragColor = vec4(mix(nightCol, dayCol, k), 1.0);
+  vec3 col = mix(nightCol, dayCol, k);
+  col = mix(col, vec3(dot(col, vec3(.3, .59, .11))), mk * .45) * mix(1.0, .3, mk);
+  gl_FragColor = vec4(col, 1.0);
 }`;
 
 function loadImage(urls) {
@@ -106,9 +111,10 @@ async function initEarth() {
       const [d, n, t] = await Promise.all([loadImage(TEX.day), loadImage(TEX.night), loadImage(TEX.topo).catch(() => null)]);
       const aniso = globe.renderer().capabilities.getMaxAnisotropy();
       const tex = im => { const x = new T.Texture(im); x.anisotropy = aniso; x.needsUpdate = true; return x; };
+      mtex = new T.CanvasTexture(mc); mx.fillStyle = '#000'; mx.fillRect(0, 0, mc.width, mc.height); mtex.needsUpdate = true;
       mat = new T.ShaderMaterial({
         uniforms: {
-          dayTex: { value: tex(d) }, nightTex: { value: tex(n) }, topoTex: { value: tex(t || d) },
+          dayTex: { value: tex(d) }, nightTex: { value: tex(n) }, topoTex: { value: tex(t || d) }, maskTex: { value: mtex }, maskAmt: { value: 0 },
           relief: { value: t ? 4.0 : 0.0 }, sun: { value: new T.Vector2() }, mode: { value: 2 },
         },
         vertexShader: VERT, fragmentShader: FRAG,
@@ -121,6 +127,7 @@ async function initEarth() {
     $('[data-mode="live"]').disabled = true;
     if (light === 'live') light = 'night';
   }
+  initHeat();
   setLighting(light);
 }
 
@@ -176,6 +183,7 @@ async function getBin() {
 }
 
 async function boot() {
+  ensureUI();
   $('#loading').hidden = false;
   const t0 = performance.now();
   let cached = false;
@@ -191,8 +199,9 @@ async function boot() {
     let gj; try { gj = await (await fetch('assets/countries.geojson')).json(); }
     catch (e) { gj = await (await fetch('https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')).json(); }
     gj.features.forEach((f, i) => f.__i = i);
-    countryFeatures = gj.features;
-    paint(); globe.polygonsData(countryFeatures);
+    FEATS = gj.features;
+    globe.pathPointLat(p => p[1]).pathPointLng(p => p[0]).pathPointAlt(() => .015).pathColor(() => '#ffb366').pathStroke(1.6).pathTransitionDuration(0).pathsData([]);
+    paint(); globe.polygonsData(gj.features);
   } catch (e) {
     console.warn(e);
     $('#lmsg').innerHTML = 'Prepared data not found. Put your FIRMS CSVs in <b>/dataset</b>, run <code>python3 preprocess.py</code> once, then serve this folder (for example <code>python3 -m http.server</code>) and reload.';
@@ -200,11 +209,13 @@ async function boot() {
   }
   const yr = $('#year'); yr.min = M.years[0]; yr.max = M.years[1]; yr.value = M.years[1];
   $('#meta').textContent = `${M.rows.toLocaleString()} detections, ${cached ? 'loaded from cache' : 'downloaded'} in ${((performance.now() - t0) / 1000).toFixed(1)} s`;
-  $('#loading').hidden = true;
-  ['#controls', '#timeline'].forEach(s => $(s).hidden = false);
+  $('#lmsg').textContent = 'Building the map …'; $('#lbar').style.width = '100%'; $('.progress').classList.add('ind');
+  await nextPaint();                                   // let the skeleton paint before the heavy first draw
+  ['#status', '#controls', '#timeline'].forEach(s => $(s).hidden = false);
   configureOverlap();
-  $('#lite').checked = lite; if (lite) $('#res').value = '2'; setView(view);
+  $('#lite').checked = lite; if (lite) $('#res').value = '2'; setView(view, true);
   detail(); draw();
+  await nextPaint(); $('#loading').hidden = true; updateHere(true);
 }
 
 /* ---------- aggregation: one pass over the summary, memoised per setting ---------- */
@@ -316,18 +327,34 @@ function agg() {
 function hexLimit() {
   return lite ? LOW_HEX_LIMIT : HEX_LIMIT;
 }
+function coarsen(pts, limit, step) {          // merge nearby cells until at most `limit` points remain (keeps full coverage, unlike dropping weak cells)
+  for (;;) {
+    const m = new Map();
+    for (const q of pts) {
+      const k = Math.floor((q.lat + 90) / step) * 1000 + Math.floor((q.lng + 180) / step), b = m.get(k);
+      if (b) { b.w += q.weight; b.la += q.lat * q.weight; b.lo += q.lng * q.weight; }
+      else m.set(k, { w: q.weight, la: q.lat * q.weight, lo: q.lng * q.weight });
+    }
+    if (m.size <= limit) return { step, pts: [...m.values()].map(b => ({ lat: b.la / b.w, lng: b.lo / b.w, weight: b.w })) };
+    step *= 1.4;
+  }
+}
+function applyHeat() {
+  if (heat) { globe.heatmapsData([]); globe.pointsData([]).hexBinPointsData([]); return; }   // the canvas overlay draws it
+  const all = cur.map(q => ({ lat: q.lat, lng: q.lng, weight: q.v }));
+  const c = all.length ? coarsen(all, lite ? LOW_HEAT_LIMIT : HEAT_LIMIT, sel >= 0 ? .5 : lite ? 4 : 2) : null;
+  globe.pointsData([]).hexBinPointsData([]);
+  if (c) globe.heatmapBandwidth(Math.max(sel >= 0 ? .8 : 1.5, c.step * .7));
+  globe.heatmapsData(c ? [c.pts] : []);
+}
 function apply(e) {
-  const limit = view === 'heat' ? HEAT_LIMIT : hexLimit();
+  if (view === 'heat') return applyHeat();
+  const limit = hexLimit();
   const src = cur.length > limit ? cur.slice(-limit) : cur;
   const points = src.map(q => {
     const p = prev.get(q.i), weight = (p ? p.v : 0) + (q.v - (p ? p.v : 0)) * e;
     return { lat: q.lat, lng: q.lng, weight, i: q.i };
   });
-  if (view === 'heat') {
-    globe.pointsData([]).hexBinPointsData([]);
-    globe.heatmapsData(points.length ? [points] : []);
-    return;
-  }
   globe.heatmapsData([]);
   if (view === 'hex') {
     globe.pointsData([]).hexBinResolution(cur.res === 2 ? 3 : 4).hexBinPointsData(points);
@@ -347,16 +374,17 @@ function run() {
   };
   anim = requestAnimationFrame(step);
 }
-function setView(v) {
-  view = v;
+function setView(v, quiet) {
+  view = v; fadeNext = true;
   document.querySelectorAll('#vseg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v));
   if (v !== 'raised') globe.pointsData([]);
-  prev = new Map(); run();
+  prev = new Map();
+  if (quiet) { run(); paintHeat(); } else busy('Switching map …', () => { run(); paintHeat(); }, false);
 }
 function draw() {
   const r = agg(), y = $('#year').value, y0 = M.years[0];
   prev = view === 'raised' && !lite ? new Map(cur.map(q => [q.i, q])) : new Map();
-  cur = r.pts; cur.res = r.res; run();
+  cur = r.pts; cur.res = r.res; run(); paintHeat();
   $('#count').textContent = fmt(r.total);
   $('#countlabel').textContent = normalizationOn() ? 'MODIS-equivalent detections' : 'detections shown';
   $('#yl').textContent = $('#cum').checked && +y > y0 ? `${y0}-${y}` : y;
@@ -370,122 +398,196 @@ const redraw = () => {
   drawTimer = setTimeout(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); }, 60);
 };
 
-/* ---------- countries: everything but the selected one fades to grey ---------- */
-function paint() {
-  const g = (gf * .8).toFixed(2);
-  globe.polygonCapColor(p => p.__aoi ? 'rgba(0,0,0,0)' : p.__i === sel ? 'rgba(0,0,0,0)' : `rgba(64,64,70,${g})`)
-    .polygonStrokeColor(p => p.__aoi ? '#ffb366' : p.__i === sel ? '#ffb366' : 'rgba(255,255,255,.18)');
-}
-function aoiFeature() {
-  if (!aoi) return null;
-  const { west, east, south, north } = aoi;
-  return {
-    __aoi: true,
-    geometry: { type: 'Polygon', coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]] },
-    type: 'Feature',
-  };
-}
-function renderAoi() {
-  const feature = aoiFeature();
-  globe.polygonsData(feature ? countryFeatures.concat(feature) : countryFeatures);
-  paint();
-  $('#clear-aoi').hidden = !aoi;
-  $('#aoi-status').textContent = aoi
-    ? `Region: ${aoi.south.toFixed(1)} to ${aoi.north.toFixed(1)} deg latitude, ${aoi.west.toFixed(1)} to ${aoi.east.toFixed(1)} deg longitude.`
-    : 'Draw a rectangle on the globe to limit the search.';
-}
-function focusAoi() {
-  const { west, east, south, north } = aoi;
-  const span = Math.max(east - west, north - south);
-  const altitude = Math.max(.45, Math.min(2.2, span / 70));
-  globe.controls().autoRotate = false;
-  globe.pointOfView({
-    lat: (south + north) / 2,
-    lng: (west + east) / 2,
-    altitude,
-  }, lite ? 0 : 900);
-}
-function globePoint(event) {
-  const point = globe.toGlobeCoords(event.clientX, event.clientY);
-  return point && Number.isFinite(point.lat) && Number.isFinite(point.lng) ? point : null;
-}
-function finishAoiDraw() {
-  if (!aoiDrawing) return;
-  aoiDrawing = false;
-  aoiStart = null;
-  $('#globe').classList.remove('aoi-drawing');
-  globe.controls().enabled = true;
-  globe.controls().autoRotate = aoiAutoRotate;
-}
-function setAoi(start, end) {
-  const west = Math.min(start.lng, end.lng), east = Math.max(start.lng, end.lng);
-  const south = Math.min(start.lat, end.lat), north = Math.max(start.lat, end.lat);
-  if (east - west < 1 || north - south < 1) {
-    $('#aoi-status').textContent = 'Draw a larger rectangle to select a region.';
-    return;
+/* ---------- loading feedback ---------- */
+const nextPaint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
+const SKEL = '<div class="skel"><i class="sk c"></i><i class="sk"></i><i class="sk s"></i><i class="sk b"></i></div>';
+let busyN = 0;
+const CSS_UI = `.sk{display:block;height:14px;border-radius:10px;margin:10px 0;background:linear-gradient(90deg,rgba(255,255,255,.07) 25%,rgba(255,255,255,.2) 50%,rgba(255,255,255,.07) 75%);background-size:200% 100%;animation:shim 1.2s infinite linear}
+.sk.c{width:54px;height:54px;border-radius:50%}.sk.s{width:60%}.sk.b{height:70px;border-radius:16px}
+.skrow{display:flex;gap:10px;justify-content:center;margin:12px 0}.skrow .sk{width:46px;height:46px;border-radius:50%;margin:0}
+@keyframes shim{to{background-position:-200% 0}}
+.busy{position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.busy[hidden]{display:none}.busy.on{opacity:1}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#ff7a1a;border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.progress.ind i{width:40%!important;animation:ind 1s ease-in-out infinite alternate}
+@keyframes ind{from{margin-left:0}to{margin-left:60%}}
+.here{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:10px;align-items:baseline;padding:6px 18px;border-radius:999px;color:#f4efe9;font:inherit;font-size:13px;cursor:pointer}
+.here b{font-size:15px}.here span{color:#b9b0c4;font-size:12px}.here[hidden]{display:none}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-corner{background:transparent}::-webkit-scrollbar-button{display:none}
+::-webkit-scrollbar-thumb{background:linear-gradient(#ff9a3c,#d61228);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(#ffb366,#e8350f);background-clip:padding-box}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:rgba(255,138,26,.6) transparent}}
+input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:6px;background:rgba(255,255,255,.16);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#ffb366,#e8350f);border:2px solid rgba(255,255,255,.35);box-shadow:0 0 10px rgba(255,122,26,.6)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#ffb366,#e8350f);border:2px solid rgba(255,255,255,.35)}
+input[type=range]::-moz-range-track{height:6px;border-radius:6px;background:rgba(255,255,255,.16)}`;
+function ensureUI() {                                  // makes the loaders work even if index.html / style.css are older
+  if (!document.getElementById('fg-css')) { const st = document.createElement('style'); st.id = 'fg-css'; st.textContent = CSS_UI; document.head.appendChild(st); }
+  if (!$('#busy')) { const b = document.createElement('div'); b.id = 'busy'; b.className = 'glass busy'; b.hidden = true; b.innerHTML = '<i class="spin"></i><span id="busytxt"></span>'; document.body.appendChild(b); }
+  if (!$('#here')) { const b = document.createElement('button'); b.id = 'here'; b.className = 'glass here'; b.hidden = true; b.title = 'Select this country'; document.body.appendChild(b); }
+  const lt = $('#lite');
+  if (lt && !$('#hop')) {
+    let v = 50; try { v = +localStorage.getItem('fg-hop') || 50; } catch (e) { /* ignore */ }
+    lt.closest('label').insertAdjacentHTML('afterend', `<label class="row">Heat map opacity: <b id="hopv">${v}</b>%<input type="range" id="hop" min="10" max="100" value="${v}"></label>`);
   }
-  aoi = { west, east, south, north };
-  TOP.clear();
-  renderAoi();
-  focusAoi();
-  redraw();
+  const ld = $('#loading'), h = ld && ld.querySelector('h1');
+  if (h && !ld.querySelector('.skrow')) h.insertAdjacentHTML('afterend', '<div class="skrow"><i class="sk"></i><i class="sk"></i><i class="sk"></i><i class="sk"></i></div>');
 }
-$('#draw-aoi').onclick = () => {
-  aoiDrawing = true;
-  aoiStart = null;
-  $('#globe').classList.add('aoi-drawing');
-  $('#aoi-status').textContent = 'Drag across the globe to draw a region.';
-  aoiAutoRotate = globe.controls().autoRotate;
-  globe.controls().autoRotate = false;
-  globe.controls().enabled = false;
-};
-$('#clear-aoi').onclick = () => {
-  finishAoiDraw();
-  aoi = null;
-  TOP.clear();
-  renderAoi();
-  redraw();
-};
-$('#globe').addEventListener('pointerdown', event => {
-  if (!aoiDrawing) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const point = globePoint(event);
-  if (!point) return;
-  aoiStart = point;
-  $('#globe').setPointerCapture(event.pointerId);
-}, true);
-$('#globe').addEventListener('pointermove', event => {
-  if (!aoiDrawing) return;
-  event.preventDefault();
-  event.stopPropagation();
-}, true);
-$('#globe').addEventListener('pointerup', event => {
-  if (!aoiDrawing || !aoiStart) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const point = globePoint(event);
-  if (point) setAoi(aoiStart, point);
-  finishAoiDraw();
-}, true);
-$('#globe').addEventListener('pointercancel', event => {
-  if (!aoiDrawing) return;
-  event.preventDefault();
-  event.stopPropagation();
-  finishAoiDraw();
-}, true);
-function fadeTo(t) {
-  if (lite) { gf = t; return paint(); }
-  const a = gf, t0 = performance.now();
-  const s = n => { const p = Math.min(1, (n - t0) / 450); gf = a + (t - a) * p; paint(); if (p < 1) requestAnimationFrame(s); };
-  requestAnimationFrame(s);
+function busy(text, fn, skel = true) {              // show spinner + skeleton, let the browser paint, then do the heavy work
+  const id = ++busyN; let b;
+  try { ensureUI(); b = $('#busy'); $('#busytxt').textContent = text; b.hidden = false; b.classList.add('on'); if (skel) $('#detail').innerHTML = SKEL; }
+  catch (e) { console.warn(e); return fn(); }       // the loader must never block the action itself
+  requestAnimationFrame(() => setTimeout(() => {
+    try { fn(); } catch (e) { console.error(e); }
+    finally { if (id === busyN) { b.classList.remove('on'); setTimeout(() => { if (id === busyN) b.hidden = true; }, 220); } }
+  }, 30));
 }
-function pick(i) {
+
+/* ---------- overlays: heat canvas (adjustable opacity) + sharp borders and names + blur/darken mask ---------- */
+const hc = document.createElement('canvas'), hx = hc.getContext('2d'), SP = [];
+const oc = document.createElement('canvas'), ox = oc.getContext('2d');          // borders + country names, high resolution
+const mc = document.createElement('canvas'), mx = mc.getContext('2d');          // mask for the shader (white = outside the selected country)
+hc.width = 1024; hc.height = 512; mc.width = 1024; mc.height = 512;
+let FEATS = [], heat = null, lab = null, mtex = null, fadeNext = false, fadeRaf = 0, maskSel = -2, maskRaf = 0, oKey = '', BBW = [];
+const HOP = () => { const e = document.getElementById('hop'); return (e ? +e.value : 50) / 100; };
+function initHeat() {
+  if (!T) return;
+  try {
+    hc.width = lite ? 1024 : 2048; hc.height = hc.width / 2; oc.width = lite ? 2048 : 4096; oc.height = oc.width / 2;   // final size BEFORE the textures exist
+    const geo = () => new T.SphereGeometry(101, lite ? 48 : 64, lite ? 32 : 44), aniso = globe.renderer().capabilities.getMaxAnisotropy();
+    const tx = new T.CanvasTexture(hc), tl = new T.CanvasTexture(oc); tl.anisotropy = aniso;
+    heat = new T.Mesh(geo(), new T.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false, opacity: HOP() }));
+    lab = new T.Mesh(new T.SphereGeometry(101.4, lite ? 48 : 64, lite ? 32 : 44), new T.MeshBasicMaterial({ map: tl, transparent: true, depthWrite: false }));
+    for (const [m, o, t] of [[heat, 2, tx], [lab, 3, tl]]) { m.rotation.y = -Math.PI / 2; m.renderOrder = o; m.userData.tx = t; m.raycast = () => {}; globe.scene().add(m); }
+  } catch (e) { console.warn('Overlay layers failed, using plain borders', e); heat = lab = null; }
+}
+function sprite(k) {
+  if (SP[k]) return SP[k];
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  const col = colorL(k / 15).replace('rgb', 'rgba'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, col.replace(')', ',.95)')); gr.addColorStop(.35, col.replace(')', ',.6)')); gr.addColorStop(.7, col.replace(')', ',.18)')); gr.addColorStop(1, col.replace(')', ',0)'));
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return SP[k] = c;
+}
+function tracePath(f, W, H, ctx) {
+  const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+  for (const p of polys) for (const ring of p) { ring.forEach(([x, y], i) => { const px = (x + 180) / 360 * W, py = (90 - y) / 180 * H; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }); ctx.closePath(); }
+}
+function paintMask() {                                  // the shader blurs (mip bias) and darkens wherever the mask is white
+  if (!mat || sel === maskSel) return; maskSel = sel;
+  const u = mat.uniforms.maskAmt, to = sel >= 0 ? 1 : 0, from = u.value;
+  if (sel >= 0 && FEATS[sel]) {
+    mx.filter = 'none'; mx.fillStyle = '#fff'; mx.fillRect(0, 0, 1024, 512);
+    mx.filter = 'blur(.6px)'; mx.fillStyle = '#000'; mx.beginPath(); tracePath(FEATS[sel], 1024, 512, mx); mx.fill(); mx.filter = 'none';
+    mtex.needsUpdate = true;
+  }
+  cancelAnimationFrame(maskRaf);
+  if (lite) { u.value = to; return; }
+  const t0 = performance.now(), st = t => { const p = Math.min(1, (t - t0) / 450); u.value = from + (to - from) * p; if (p < 1) maskRaf = requestAnimationFrame(st); };
+  maskRaf = requestAnimationFrame(st);
+}
+function paintOutlines() {                              // crisp borders + every country name, drawn once per size / selection
+  if (!lab || !FEATS.length) return;
+  const alt = (globe.pointOfView() || {}).altitude || 2.5, tier = sel >= 0 || alt < 1.5 ? 2 : 1;   // zoomed out: only bigger countries get a name
+  const W = lite ? 2048 : 4096, H = W / 2, key = W + '|' + sel + '|' + tier;
+  if (key === oKey) return; oKey = key;
+  if (!BBW.length) BBW = FEATS.map(f => { const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates; return Math.max(...polys.map(p => { const xs = p[0].map(c => c[0]); return Math.max(...xs) - Math.min(...xs); })); });
+  if (oc.width !== W) { oc.width = W; oc.height = H; lab.userData.tx.dispose(); }
+  ox.clearRect(0, 0, W, H); ox.lineJoin = 'round';
+  const u = W / 2048;
+  ox.lineWidth = u * 1.1; ox.strokeStyle = 'rgba(255,255,255,.55)'; ox.beginPath();
+  FEATS.forEach((f, i) => { if (i !== sel) tracePath(f, W, H, ox); }); ox.stroke();
+  ox.textAlign = 'center'; ox.textBaseline = 'middle';
+  const placed = [], order = countries.map((c, k) => k).sort((a, b) => (b === sel) - (a === sel) || BBW[b] - BBW[a]);   // big countries first, so they win the space
+  for (const i of order) {
+    const c = countries[i];
+    if (tier === 1 && BBW[i] < 7 && i !== sel) continue;
+    const lat = c.lat * Math.PI / 180, sx = Math.min(1.8, 1 / Math.max(.3, Math.cos(lat)));            // undo the stretching near the poles
+    const fs = Math.max(u * (tier === 1 ? 12 : 10), Math.min(u * (tier === 1 ? 26 : 34), BBW[i] / 360 * W / c.name.length * 1.5)) * Math.max(.6, Math.cos(lat) ** .5);
+    ox.font = `${i === sel ? 700 : 600} ${fs}px "Bricolage Grotesque", system-ui, sans-serif`;
+    const x = (c.lng + 180) / 360 * W, y = (90 - c.lat) / 180 * H, w = ox.measureText(c.name).width * sx, pad = u * 3;
+    const hit = placed.some(r => Math.abs(r.x - x) < (r.w + w) / 2 + pad && Math.abs(r.y - y) < (r.h + fs) / 2 + pad);
+    if (hit && i !== sel) continue;                                                                      // no overlapping names
+    placed.push({ x, y, w, h: fs });
+    ox.save(); ox.translate(x, y); ox.scale(sx, 1);
+    ox.globalAlpha = sel < 0 || i === sel ? .95 : .4; ox.lineWidth = fs * .13; ox.strokeStyle = 'rgba(0,0,0,.6)'; ox.fillStyle = '#fff';
+    ox.strokeText(c.name, 0, 0); ox.fillText(c.name, 0, 0); ox.restore();
+  }
+  ox.globalAlpha = 1; lab.userData.tx.needsUpdate = true;
+}
+const GEO = [];
+function geoIndex() {
+  if (GEO.length) return;
+  FEATS.forEach(f => { const ps = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    GEO.push(ps.map(p => { const r = p[0]; let x0 = 181, y0 = 91, x1 = -181, y1 = -91; for (const [x, y] of r) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } return { b: [x0, y0, x1, y1], r }; })); });
+}
+function inRing(r, x, y) { let c = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
+function countryAt(lat, lng) {
+  geoIndex();
+  for (let i = 0; i < GEO.length; i++) for (const p of GEO[i]) if (lng >= p.b[0] && lng <= p.b[2] && lat >= p.b[1] && lat <= p.b[3] && inRing(p.r, lng, lat)) return i;
+  return -1;
+}
+let hereT = 0;
+function updateHere(force) {                          // "you are looking at ..." pill, from the centre of the view
+  const now = performance.now(); if (!force && now - hereT < 200) return; hereT = now;
+  const el = $('#here'); if (!el || !FEATS.length) return;
+  const p = globe.pointOfView(), i = countryAt(p.lat, p.lng), f = (v, a, b) => `${Math.abs(v).toFixed(0)}°${v >= 0 ? a : b}`;
+  el.dataset.i = i; el.innerHTML = `<b>${i >= 0 ? countries[i].name : 'Open water'}</b><span>${f(p.lat, 'N', 'S')} ${f(p.lng, 'E', 'W')}</span>`; el.hidden = false;
+}
+let pathSel = -2, selLine = null;
+function setSelPath() {                                // the selected country's border is a real 3D line: always crisp, never blurry
+  if (pathSel === sel) return; pathSel = sel;
+  if (selLine) { globe.scene().remove(selLine); selLine.traverse(o => o.geometry && o.geometry.dispose()); selLine = null; }
+  if (T && sel >= 0 && FEATS[sel]) {
+    const g = new T.Group(), ff = FEATS[sel], rings = ff.geometry.type === 'Polygon' ? ff.geometry.coordinates : ff.geometry.coordinates.flat(1);
+    for (const r of rings) {
+      const pts = [];
+      for (const [lng, lat] of r) { const u = (lng + 180) / 360 * 2 * Math.PI, th = (90 - lat) * Math.PI / 180; pts.push(-101.7 * Math.cos(u) * Math.sin(th), 101.7 * Math.cos(th), 101.7 * Math.sin(u) * Math.sin(th)); }
+      const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pts, 3));
+      g.add(new T.LineLoop(geo, new T.LineBasicMaterial({ color: 0xffb366 })));
+    }
+    g.rotation.y = -Math.PI / 2; g.traverse(o => { o.raycast = () => {}; o.renderOrder = 5; }); selLine = g; globe.scene().add(g);
+  }
+  const f = FEATS[sel];
+  globe.pathsData(sel >= 0 && f ? (f.geometry.type === 'Polygon' ? f.geometry.coordinates : f.geometry.coordinates.flat(1)) : []);
+}
+function paintHeat() {
+  setSelPath(); paintMask(); paintOutlines();
+  if (!heat) return;
+  const W = lite ? 1024 : 2048, H = W / 2;
+  if (hc.width !== W) { hc.width = W; hc.height = H; heat.userData.tx.dispose(); }
+  hx.clearRect(0, 0, W, H);
+  if (view === 'heat') {
+    const d = W / 360 * (cur.res || 2) * 4.2;
+    for (const q of cur) {                            // cur is sorted weak to strong, so hot spots end up on top
+      const l = level(q.v); if (l < .01) continue;
+      hx.globalAlpha = Math.min(1, .3 + l);
+      hx.drawImage(sprite(Math.round(l * 15)), (q.lng + 180) / 360 * W - d / 2, (90 - q.lat) / 180 * H - d / 2, d, d);
+    }
+    hx.globalAlpha = 1;
+  }
+  heat.userData.tx.needsUpdate = true;
+  const m = heat.material, o = HOP(); cancelAnimationFrame(fadeRaf);
+  if (!fadeNext || lite) { m.opacity = o; fadeNext = false; return; }
+  fadeNext = false; m.opacity = 0; const t0 = performance.now();
+  const step = t => { const p = Math.min(1, (t - t0) / 350); m.opacity = p * o; if (p < 1) fadeRaf = requestAnimationFrame(step); };
+  fadeRaf = requestAnimationFrame(step);
+}
+
+/* ---------- countries ---------- */
+function paint() {                                    // polygons only catch clicks when the overlay layers are available
+  if (heat && lab) { globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(() => 'rgba(0,0,0,0)'); return; }
+  globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(p => p.__i === sel ? '#ffb366' : 'rgba(255,255,255,.5)');
+}
+function fadeTo(t) { gf = t; fadeNext = true; if (!(heat && lab)) paint(); }
+function pick(i) { busy('Loading ' + countries[i].name + ' …', () => pickNow(i)); }
+function clear() { busy('Back to overview …', clearNow); }
+function pickNow(i) {
   sel = i; tab = 'stats'; loc = null; globe.ringsData([]); globe.controls().autoRotate = false; fadeTo(1);
   globe.pointOfView({ lat: countries[i].lat, lng: countries[i].lng, altitude: 1.8 }, lite ? 0 : 1000);
   draw();
 }
-function clear() { sel = -1; loc = null; globe.ringsData([]); fadeTo(0); draw(); }
+function clearNow() { sel = -1; loc = null; globe.ringsData([]); fadeTo(0); draw(); }
 
 function list() {
   const q = $('#csearch').value.trim().toLowerCase(), cs = agg().cs;
@@ -612,7 +714,17 @@ $('#detail').onclick = e => {
   if (t.dataset.y !== undefined) { $('#year').value = M.years[0] + +t.dataset.y; redraw(); }
 };
 document.querySelectorAll('#vseg button').forEach(b => b.onclick = () => setView(b.dataset.v));
-$('#lite').onchange = e => { lite = e.target.checked; fit(); if (lite) globe.controls().autoRotate = false; run(); };
+document.addEventListener('input', e => {
+  if (e.target.id !== 'hop') return;
+  const v = e.target.value; $('#hopv').textContent = v; try { localStorage.setItem('fg-hop', v); } catch (x) { /* ignore */ }
+  if (heat) heat.material.opacity = v / 100;
+});
+$('#lite').onchange = e => { lite = e.target.checked; try { localStorage.setItem('fg-lite', lite ? '1' : '0'); } catch (x) { /* ignore */ } fit(); if (lite) globe.controls().autoRotate = false; run(); paintHeat(); };
 document.addEventListener('visibilitychange', () => document.hidden ? globe.pauseAnimation() : globe.resumeAnimation());
+{ const ctl = globe.controls(); let rt = 0;           // render at lower resolution while dragging, restore when idle
+  ctl.addEventListener('start', () => { clearTimeout(rt); globe.renderer().setPixelRatio(lite ? .6 : .85); });
+  ctl.addEventListener('end', () => { clearTimeout(rt); rt = setTimeout(() => { fit(); paintOutlines(); }, 400); });
+  ctl.addEventListener('change', () => updateHere());
+  document.addEventListener('click', e => { const h = e.target.closest('#here'); if (h && +h.dataset.i >= 0) pick(+h.dataset.i); }); }
 await initEarth();
 boot();

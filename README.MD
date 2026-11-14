@@ -149,10 +149,8 @@ Raw CSVs are **not** committed (too large). Download them from [FIRMS](https://f
 ```bash
 # 1. Put FIRMS MODIS and VIIRS CSVs in ./dataset (subfolders are fine)
 
-# 2. Install the preprocessing requirements
-python3 -m pip install -r requirements.txt
-
-# 3. Build the compact summary (once; re-run when CSVs change)
+# 2. Build the compact summary (once; re-run when CSVs change)
+pip install -r requirements.txt   # run.py does this automatically
 python3 preprocess.py
 
 # 4. Serve the folder and open it
