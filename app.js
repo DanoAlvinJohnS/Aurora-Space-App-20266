@@ -42,7 +42,7 @@ const globe = Globe()($('#globe'))
 globe.controls().autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches && !lite;
 globe.controls().autoRotateSpeed = 0.4;
 const fit = () => { globe.renderer().setPixelRatio(lite ? 1 : Math.min(devicePixelRatio || 1, 1.5)); globe.width(innerWidth).height(innerHeight); };
-addEventListener('resize', fit); fit();
+addEventListener('resize', () => { fit(); updateNames(); }); fit();
 
 /* ---------- spring camera: starts from where the globe is NOW, keeps its velocity if interrupted ---------- */
 let cam = null;
@@ -224,12 +224,12 @@ async function boot() {
   $('#meta').textContent = `${M.rows.toLocaleString()} detections, ${cached ? 'loaded from cache' : 'downloaded'} in ${((performance.now() - t0) / 1000).toFixed(1)} s`;
   $('#lmsg').textContent = 'Building the map …'; $('#lbar').style.width = '100%'; $('.progress').classList.add('ind');
   await nextPaint();                                   // let the skeleton paint before the heavy first draw
-  ['#status', '#controls', '#timeline'].forEach(s => $(s).hidden = false);
-  materialize($('#status'), { dx: -18, dy: 0 }); setTimeout(() => materialize($('#controls'), { dx: 18, dy: 0 }), 70); setTimeout(() => materialize($('#timeline'), { dx: 0, dy: 18 }), 140);
+  ['#controls', '#timeline'].forEach(s => $(s).hidden = false);
+  materialize($('#controls'), { dx: -18, dy: 0 });
   configureOverlap();
   $('#lite').checked = lite; if (lite) $('#res').value = '2'; setView(view, true);
   detail(); draw();
-  await nextPaint(); $('#loading').hidden = true; updateHere(true);
+  await nextPaint(); $('#loading').hidden = true; updateHere(true); updateNames();
 }
 
 /* ---------- aggregation: one pass over the summary, memoised per setting ---------- */
@@ -396,7 +396,8 @@ function draw() {
   $('#yl').textContent = $('#cum').checked && +y > y0 ? `${y0}-${y}` : y;
   rk = []; countries.forEach((c, i) => r.cs[i] > 0 && rk.push([i, r.cs[i]])); rk.sort((a, b) => b[1] - a[1]);
   const L = (e, t, col) => ({ lat: countries[e[0]].lat, lng: countries[e[0]].lng, text: t + countries[e[0]].name, color: col });
-  globe.labelsData(sel < 0 && rk.length > 1 ? [L(rk[0], 'Highest: ', '#ffe08a'), L(rk[rk.length - 1], 'Lowest: ', '#9fd0ff')] : []);
+  globe.labelsData([]);
+  hiI = sel < 0 && rk.length > 1 ? rk[0][0] : -1; loI = sel < 0 && rk.length > 1 ? rk[rk.length - 1][0] : -1; updateNames();
   list(); detail();
 }
 const redraw = () => {
@@ -492,10 +493,9 @@ function paintMask() {                                  // the shader blurs (mip
   const t0 = performance.now(), st = t => { const p = Math.min(1, (t - t0) / 450); u.value = from + (to - from) * p; if (p < 1) maskRaf = requestAnimationFrame(st); };
   maskRaf = requestAnimationFrame(st);
 }
-function paintOutlines() {                              // crisp borders + every country name, drawn once per size / selection
+function paintOutlines() {                              // crisp borders, drawn once per size / selection (names are DOM text, see updateNames)
   if (!lab || !FEATS.length) return;
-  const alt = (globe.pointOfView() || {}).altitude || 2.5, tier = sel >= 0 || alt < 1.5 ? 2 : 1;   // zoomed out: only bigger countries get a name
-  const W = lite ? 2048 : 4096, H = W / 2, key = W + '|' + sel + '|' + tier;
+  const W = lite ? 2048 : 4096, H = W / 2, key = W + '|' + sel;
   if (key === oKey) return; oKey = key;
   if (!BBW.length) BBW = FEATS.map(f => { const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates; return Math.max(...polys.map(p => { const xs = p[0].map(c => c[0]); return Math.max(...xs) - Math.min(...xs); })); });
   if (oc.width !== W) { oc.width = W; oc.height = H; lab.userData.tx.dispose(); }
@@ -503,23 +503,71 @@ function paintOutlines() {                              // crisp borders + every
   const u = W / 2048;
   ox.lineWidth = u * 1.1; ox.strokeStyle = 'rgba(255,255,255,.55)'; ox.beginPath();
   FEATS.forEach((f, i) => { if (i !== sel) tracePath(f, W, H, ox); }); ox.stroke();
-  ox.textAlign = 'center'; ox.textBaseline = 'middle';
-  const placed = [], order = countries.map((c, k) => k).sort((a, b) => (b === sel) - (a === sel) || BBW[b] - BBW[a]);   // big countries first, so they win the space
-  for (const i of order) {
-    const c = countries[i];
-    if (tier === 1 && BBW[i] < 7 && i !== sel) continue;
-    const lat = c.lat * Math.PI / 180, sx = Math.min(1.8, 1 / Math.max(.3, Math.cos(lat)));            // undo the stretching near the poles
-    const fs = Math.max(u * (tier === 1 ? 12 : 10), Math.min(u * (tier === 1 ? 26 : 34), BBW[i] / 360 * W / c.name.length * 1.5)) * Math.max(.6, Math.cos(lat) ** .5);
-    ox.font = `${i === sel ? 700 : 600} ${fs}px "Bricolage Grotesque", system-ui, sans-serif`;
-    const x = (c.lng + 180) / 360 * W, y = (90 - c.lat) / 180 * H, w = ox.measureText(c.name).width * sx, pad = u * 3;
-    const hit = placed.some(r => Math.abs(r.x - x) < (r.w + w) / 2 + pad && Math.abs(r.y - y) < (r.h + fs) / 2 + pad);
-    if (hit && i !== sel) continue;                                                                      // no overlapping names
-    placed.push({ x, y, w, h: fs });
-    ox.save(); ox.translate(x, y); ox.scale(sx, 1);
-    ox.globalAlpha = sel < 0 || i === sel ? .95 : .4; ox.lineWidth = fs * .13; ox.strokeStyle = 'rgba(0,0,0,.6)'; ox.fillStyle = '#fff';
-    ox.strokeText(c.name, 0, 0); ox.fillText(c.name, 0, 0); ox.restore();
-  }
   ox.globalAlpha = 1; lab.userData.tx.needsUpdate = true;
+}
+
+/* ---------- country names: ONE size for every country, shown only on the side facing you ---------- */
+let hiI = -1, loI = -1, namesRaf = 0, NB = null;
+const NAME_PX = 11, FACE_DEG = 42, nameEls = [], nctx = document.createElement('canvas').getContext('2d');
+nctx.font = `600 ${NAME_PX}px "Bricolage Grotesque", system-ui, sans-serif`;
+const nameW = new Map();
+const textW = i => nameW.get(i) ?? (nameW.set(i, nctx.measureText(countries[i].name).width + 6), nameW.get(i));
+function nameBoxes() {                                   // each country's biggest piece, in degrees (width, height)
+  if (NB) return NB;
+  return NB = FEATS.map(f => {
+    const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    let best = [0, 0];
+    for (const p of polys) {
+      let x0 = 181, x1 = -181, y0 = 91, y1 = -91;
+      for (const [x, y] of p[0]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      if (x1 - x0 > best[0]) best = [x1 - x0, y1 - y0];
+    }
+    return best;
+  });
+}
+function updateNames() {
+  if (namesRaf) return;
+  namesRaf = requestAnimationFrame(() => { namesRaf = 0; drawNames(); });
+}
+function drawNames() {
+  const host = $('#names'); if (!host || !countries.length || !FEATS.length) return;
+  if (!nameEls.length) countries.forEach((c, i) => { const s = document.createElement('span'); s.className = 'cn'; s.textContent = c.name; host.appendChild(s); nameEls[i] = s; });
+  const p = globe.pointOfView(), rad = Math.PI / 180, bb = nameBoxes();
+  const sb = $('#controls').getBoundingClientRect().right, W = innerWidth, H = innerHeight;
+  const cand = [];
+  for (let i = 0; i < countries.length; i++) {
+    const c = countries[i];
+    if (sel >= 0 && i !== sel) continue;                 // a country is open: only its name
+    const cosd = Math.sin(p.lat * rad) * Math.sin(c.lat * rad) + Math.cos(p.lat * rad) * Math.cos(c.lat * rad) * Math.cos((p.lng - c.lng) * rad);
+    if (cosd < Math.cos(FACE_DEG * rad)) continue;       // not facing you
+    const o = globe.getScreenCoords(c.lat, c.lng, 0.002); if (!o) continue;
+    if (o.x < sb + 8 || o.x > W - 8 || o.y < 8 || o.y > H - 8) continue;   // behind the sidebar or off screen
+    const w = textW(i), forced = i === sel || i === hiI || i === loI;
+    let room = Infinity;
+    if (!forced) {                                       // the name must fit inside the country, so it never touches borders or neighbours
+      const hw = bb[i][0] / 2, hh = bb[i][1] / 2;
+      const l = globe.getScreenCoords(c.lat, c.lng - hw, 0.002), r = globe.getScreenCoords(c.lat, c.lng + hw, 0.002);
+      const t = globe.getScreenCoords(Math.min(89, c.lat + hh), c.lng, 0.002), u = globe.getScreenCoords(Math.max(-89, c.lat - hh), c.lng, 0.002);
+      if (!l || !r || !t || !u) continue;
+      const pw = Math.hypot(r.x - l.x, r.y - l.y), ph = Math.hypot(t.x - u.x, t.y - u.y);
+      if (pw < w * 1.1 || ph < NAME_PX * 1.6) continue;
+      room = pw;
+    }
+    cand.push({ i, x: o.x, y: o.y, w, room, forced });
+  }
+  cand.sort((a, b) => (b.forced - a.forced) || (b.room - a.room));
+  const placed = [], show = new Set();
+  for (const q of cand) {
+    const h = NAME_PX + 4;
+    if (!q.forced && placed.some(r => Math.abs(r.x - q.x) < (r.w + q.w) / 2 + 4 && Math.abs(r.y - q.y) < (r.h + h) / 2 + 2)) continue;
+    placed.push({ x: q.x, y: q.y, w: q.w, h }); show.add(q.i);
+    const el = nameEls[q.i];
+    el.style.transform = `translate(${Math.round(q.x)}px,${Math.round(q.y)}px) translate(-50%,-50%)`;
+    el.className = 'cn' + (q.i === sel ? ' sel' : q.i === hiI ? ' hi' : q.i === loI ? ' lo' : '');
+    el.title = q.i === hiI ? 'Most burning' : q.i === loI ? 'Least burning' : '';
+    el.style.display = 'block';
+  }
+  nameEls.forEach((el, i) => { if (!show.has(i) && el.style.display !== 'none') el.style.display = 'none'; });
 }
 const GEO = [];
 function geoIndex() {
@@ -644,6 +692,45 @@ function detail() {
 }
 
 /* ---------- wiring ---------- */
+/* ---------- sidebar (layout from 2nd.rar) ---------- */
+function activateSidebarTab(name) {
+  const dashboard = name === 'dashboard';
+  $('#dashboard-tab').setAttribute('aria-selected', dashboard);
+  $('#settings-tab').setAttribute('aria-selected', !dashboard);
+  $('#dashboard-panel').hidden = !dashboard;
+  $('#settings-panel').hidden = dashboard;
+}
+document.querySelectorAll('.sidebar-tabs [role="tab"]').forEach(button => {
+  button.onclick = () => activateSidebarTab(button.id === 'dashboard-tab' ? 'dashboard' : 'settings');
+});
+let expandedSidebarWidth = '';
+$('#collapse').onclick = () => {
+  const collapsed = $('#controls').classList.toggle('is-collapsed');
+  if (collapsed) { expandedSidebarWidth = $('#controls').style.width; $('#controls').style.width = '58px'; }
+  else $('#controls').style.width = expandedSidebarWidth;
+  $('#collapse').setAttribute('aria-expanded', !collapsed);
+  $('#collapse').setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+  setTimeout(updateNames, 0);
+};
+const resizeHandle = $('#resize-handle');
+function resizeSidebar(width) {
+  const styles = getComputedStyle($('#controls'));
+  const min = Math.max(220, parseFloat(styles.minWidth) || 0), max = parseFloat(styles.maxWidth) || innerWidth;
+  $('#controls').style.width = `${Math.max(min, Math.min(max, width))}px`;
+  updateNames();
+}
+resizeHandle.addEventListener('pointerdown', e => {
+  if ($('#controls').classList.contains('is-collapsed')) return;
+  e.preventDefault();
+  const startX = e.clientX, startWidth = $('#controls').getBoundingClientRect().width;
+  resizeHandle.setPointerCapture(e.pointerId);
+  const move = ev => resizeSidebar(startWidth + ev.clientX - startX);
+  const stop = () => { ['pointermove', 'pointerup', 'pointercancel'].forEach((t, k) => resizeHandle.removeEventListener(t, k ? stop : move)); };
+  resizeHandle.addEventListener('pointermove', move); resizeHandle.addEventListener('pointerup', stop); resizeHandle.addEventListener('pointercancel', stop);
+});
+resizeHandle.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); resizeSidebar($('#controls').getBoundingClientRect().width + (e.key === 'ArrowRight' ? 16 : -16)); }
+});
 $('#clist').onclick = e => { const b = e.target.closest('.ci'); if (b) pick(+b.dataset.i); };
 $('#csearch').addEventListener('input', list);
 addEventListener('keydown', e => { if (e.key === 'Escape' && sel >= 0) clear(); });
@@ -680,7 +767,7 @@ document.addEventListener('visibilitychange', () => document.hidden ? globe.paus
 { const ctl = globe.controls(); let rt = 0;           // render at lower resolution while dragging, restore when idle
   ctl.addEventListener('start', () => { clearTimeout(rt); globe.renderer().setPixelRatio(lite ? .6 : .85); });
   ctl.addEventListener('end', () => { clearTimeout(rt); rt = setTimeout(() => { fit(); paintOutlines(); }, 400); });
-  ctl.addEventListener('change', () => updateHere());
+  ctl.addEventListener('change', () => { updateHere(); updateNames(); });
   document.addEventListener('click', e => { const h = e.target.closest('#here'); if (h && +h.dataset.i >= 0) pick(+h.dataset.i); }); }
 await initEarth();
 boot();

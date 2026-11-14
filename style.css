@@ -192,3 +192,42 @@ body.about-page #globe{pointer-events:none;z-index:0}
 /* press feedback: reacts on pointer-down, not on release */
 .tile,.ci,.seg button,.seg2 button,.seg3 button,.tabs button,.nav div a{transition:transform .12s,background .2s,box-shadow .2s,color .2s}
 .tile:active,.ci:active,.seg button:active,.seg2 button:active,.seg3 button:active,.tabs button:active,.nav div a:active{transform:scale(.96)}
+
+
+/* =====================================================================
+   Layout from 2nd.rar: one full-height sidebar (Dashboard / View settings),
+   collapsible and resizable. Colours, fonts and motion stay from main.rar.
+   ===================================================================== */
+.globe-page .nav{left:auto;right:16px;transform:none}
+.side.left{top:0;bottom:0;left:0;width:33.333vw;min-width:min(280px,90vw);max-width:33.333vw;height:100vh;max-height:none;border-radius:0 22px 22px 0;scrollbar-width:none}
+.side.left::-webkit-scrollbar{display:none}
+.resize-handle{position:absolute;top:0;right:0;bottom:0;z-index:4;width:10px;cursor:ew-resize;touch-action:none}
+.resize-handle:hover,.resize-handle:focus-visible{background:rgba(122,162,255,.3);outline:0}
+.sidebar-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.sidebar-head h1{margin:0;font-size:24px}
+.collapse{width:30px;height:30px;color:var(--ink);font-size:24px;line-height:1;background:var(--fill);border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.sidebar-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:0 0 14px;padding:3px;background:var(--fill);border-radius:12px}
+.sidebar-tabs button{padding:8px 4px;color:var(--mute);font:inherit;font-size:13px;background:none;border:0;border-radius:9px;cursor:pointer;transition:background .2s,color .2s}
+.sidebar-tabs button[aria-selected="true"]{color:#fff;font-weight:600;background:var(--sel);box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.sidebar-panel[hidden]{display:none}
+.side.is-collapsed{width:58px;min-width:58px;padding:14px;overflow:hidden}
+.side.is-collapsed .sidebar-head{margin:0}
+.side.is-collapsed .sidebar-head>div,.side.is-collapsed .sidebar-tabs,.side.is-collapsed .sidebar-panel,.side.is-collapsed .resize-handle{display:none}
+.side.is-collapsed .collapse{transform:rotate(180deg)}
+.sidebar-panel>.tl{position:static;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;width:auto;margin:16px 0;padding:12px;transform:none;border-radius:18px}
+.sidebar-panel>.tl input[type=range]{grid-column:1/-1;grid-row:1}
+.sidebar-panel>.tl .btn{grid-column:1;grid-row:2}
+.sidebar-panel>.tl strong{grid-column:2;grid-row:2;min-width:0;text-align:right}
+.sidebar-panel>.tl label{grid-column:1/-1;grid-row:3}
+#status h2{margin-top:6px}
+.here{bottom:22px}
+@media(max-width:700px){
+  .side.left{top:0;width:min(90vw,420px);min-width:0;max-width:90vw;max-height:none}
+  .globe-page .nav{top:10px;right:10px}
+}
+
+/* ---------- country names on the globe: one size, only where the globe faces you ---------- */
+#names{position:fixed;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+.cn{position:absolute;left:0;top:0;display:none;white-space:nowrap;font:600 11px/1 "Bricolage Grotesque",system-ui,sans-serif;color:#fff;letter-spacing:.01em;text-shadow:0 0 3px rgba(0,0,0,.95),0 0 7px rgba(0,0,0,.75);will-change:transform}
+.cn.sel{font-weight:700;color:#ffd98a}
+.cn.hi{color:#ffe08a}.cn.lo{color:#9fd0ff}
