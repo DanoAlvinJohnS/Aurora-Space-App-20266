@@ -34,6 +34,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{ou
 .nav div a.active{background:var(--sel);color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
 
 #globe{position:fixed;inset:0}
+#hotspot-legend{position:fixed;top:50%;right:18px;z-index:3;display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 9px;border-radius:16px;color:var(--mute);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;transform:translateY(-50%);pointer-events:none}
+#hotspot-legend i{display:block;width:10px;height:150px;border-radius:8px;background:linear-gradient(to top,#ffe08a,#ff8a1a,#d61228,#7a0019);box-shadow:0 0 12px rgba(255,118,72,.25)}
 .center{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(460px,90vw);text-align:center;z-index:4}
 .center.over{border-color:var(--blue)}
 
@@ -63,8 +65,6 @@ code{background:var(--fill);color:var(--ink);padding:1px 6px;border-radius:6px;f
 .big{font-size:14px;margin:4px 0}
 .big span{font-size:34px;font-weight:700;letter-spacing:-.03em;color:var(--ink);line-height:1.1}
 .big #countlabel{font-size:14px;font-weight:500;letter-spacing:0;color:var(--mute)}
-.legend{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mute);margin-top:14px}
-.legend i{flex:1;height:8px;border-radius:6px;background:linear-gradient(90deg,#ffe08a,#ff8a1a,#d61228,#7a0019)}
 .x{position:absolute;top:10px;right:14px;background:none;border:0;color:var(--mute);font-size:24px;cursor:pointer}
 
 /* grouped "inset list" blocks */
@@ -116,14 +116,12 @@ select option{background:#2c2c2e;color:#fff}
 
 /* bento tiles: mean = graphite, highest = sunset, lowest = navy */
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.tile{appearance:none;-webkit-appearance:none;background:var(--card);border:0;border-radius:18px;color:var(--ink);font:inherit;font-size:12px;padding:10px 6px;text-align:center;cursor:pointer;
+.overview{margin:14px 0 0;padding:14px;border:1px solid rgba(122,162,255,.55);border-radius:18px;background:rgba(74,127,248,.12);box-shadow:0 0 20px rgba(74,127,248,.12)}
+.overview h3{margin-top:0}
+.tile{appearance:none;-webkit-appearance:none;background:var(--fill);border:0;border-radius:18px;color:var(--ink);font:inherit;font-size:12px;padding:10px 6px;text-align:center;cursor:pointer;
  display:flex;flex-direction:column;gap:2px;transition:transform .15s,box-shadow .2s}
 .tile:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.18)}
 .tile b{font-size:16px;color:var(--bluet)}
-.tile:nth-child(2){background:linear-gradient(135deg,#ffc757,#ff7648);color:var(--dark)}
-.tile:nth-child(2) b{color:var(--dark)}
-.tile:nth-child(3){background:var(--navy);color:rgba(255,255,255,.85)}
-.tile:nth-child(3) b{color:#fff}
 .stats{display:flex;gap:18px;margin:10px 0}.stats b{display:block;font-size:20px;color:var(--bluet)}
 
 /* charts */
@@ -186,6 +184,7 @@ body.about-page #globe{pointer-events:none;z-index:0}
 .team div:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(0,0,0,.5)}
 
 @media(max-width:700px){.side{max-height:40vh}.left{top:76px}.right{top:auto;bottom:90px}
+ #hotspot-legend{right:10px;padding:9px 7px}.globe-page .nav{right:10px}
  .page{grid-template-columns:1fr;margin-top:90px}.page .card:nth-child(n){grid-column:auto}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
@@ -210,7 +209,7 @@ body.about-page #globe{pointer-events:none;z-index:0}
 .sidebar-tabs button{padding:8px 4px;color:var(--mute);font:inherit;font-size:13px;background:none;border:0;border-radius:9px;cursor:pointer;transition:background .2s,color .2s}
 .sidebar-tabs button[aria-selected="true"]{color:#fff;font-weight:600;background:var(--sel);box-shadow:0 1px 4px rgba(0,0,0,.4)}
 .sidebar-panel[hidden]{display:none}
-.side.is-collapsed{width:58px;min-width:58px;padding:14px;overflow:hidden}
+.side.is-collapsed{top:50%;bottom:auto;left:12px;width:58px;min-width:58px;max-width:58px;height:58px;max-height:58px;padding:14px;overflow:hidden;border-radius:16px;transform:translateY(-50%);box-shadow:0 12px 32px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.1)}
 .side.is-collapsed .sidebar-head{margin:0}
 .side.is-collapsed .sidebar-head>div,.side.is-collapsed .sidebar-tabs,.side.is-collapsed .sidebar-panel,.side.is-collapsed .resize-handle{display:none}
 .side.is-collapsed .collapse{transform:rotate(180deg)}

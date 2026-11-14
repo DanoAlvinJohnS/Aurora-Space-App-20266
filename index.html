@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=purple-2">
+<link rel="stylesheet" href="style.css?v=purple-3">
 </head>
 <body class="globe-page">
 <nav class="glass nav">
@@ -16,6 +16,11 @@
 
 <div id="globe"></div>
 <div id="names" aria-hidden="true"></div>
+<aside id="hotspot-legend" class="glass" aria-label="Hotspot intensity legend">
+  <span>High</span>
+  <i aria-hidden="true"></i>
+  <span>Low</span>
+</aside>
 
 <section id="loading" class="glass card center" hidden>
   <h1>Loading fire data</h1>
@@ -36,29 +41,25 @@
   </div>
   <div class="sidebar-tabs" role="tablist" aria-label="Globe panels">
     <button type="button" role="tab" id="dashboard-tab" aria-controls="dashboard-panel" aria-selected="true">Dashboard</button>
-    <button type="button" role="tab" id="settings-tab" aria-controls="settings-panel" aria-selected="false">View settings</button>
+    <button type="button" role="tab" id="explore-tab" aria-controls="explore-panel" aria-selected="false">Explore</button>
   </div>
 
   <div id="dashboard-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="dashboard-tab">
-    <h3>Search by Country</h3>
-    <input id="csearch" type="search" placeholder="Search a country" aria-label="Search a country">
-    <div id="clist" class="list"></div>
+    <section id="status" aria-label="Burning activity">
+      <h2>Burning activity</h2>
+      <p class="big"><span id="count">0</span> <span id="countlabel">detections shown</span></p>
+      <p id="meta" class="hint"></p>
+      <div id="detail"></div>
+    </section>
+  </div>
+
+  <div id="explore-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="explore-tab" hidden>
     <section id="timeline" class="glass tl" hidden>
       <button id="play" class="btn">Play</button>
       <input id="year" type="range" aria-label="Year">
       <strong id="yl"></strong>
       <label><input type="checkbox" id="cum" checked> Cumulative</label>
     </section>
-    <section id="status" aria-label="Burning activity">
-      <h2>Burning activity</h2>
-      <p class="big"><span id="count">0</span> <span id="countlabel">detections shown</span></p>
-      <p id="meta" class="hint"></p>
-      <div class="legend"><span>Rarely burns</span><i></i><span>Burns often</span></div>
-      <div id="detail"></div>
-    </section>
-  </div>
-
-  <div id="settings-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="settings-tab" hidden>
     <fieldset><legend>Map</legend>
       <div class="seg3" id="vseg" role="group" aria-label="Map style">
         <button type="button" data-v="heat" aria-pressed="true">Heat map</button>

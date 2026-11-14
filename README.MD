@@ -118,7 +118,7 @@ FIRMS CSVs ──► preprocess.py ──► fire.bin + fire.json ──► brow
    - When both sensors have detections in 2012 or later, the optional overlap adjustment computes a global VIIRS weight for each confidence filter: MODIS detections in the shared period divided by VIIRS detections in that same period. The weight is applied to VIIRS counts in the map and country/location summaries.
 3. **Load.** The browser downloads `fire.bin` once and caches it (Cache API); later visits load instantly.
 4. **Aggregate.** One pass over the summary per setting, memoized, produces the grid shown as a heat map, H3 hexagonal prisms, or raised hotspots. Cells without a Natural Earth country assignment are omitted from the map layers.
-5. **Render.** Globe.gl renders the heat map with a narrow Gaussian density kernel, hexagons with its H3 bin layer, and raised hotspots as merged point markers. Heat-map smoothing can still extend slightly past coastlines.
+5. **Render.** The heat map first applies a weighted 3x3 neighborhood average to reduce single-cell noise, then uses an adaptive 60th-percentile floor and log-scaled contrast to emphasize local hotspots. Hexagons use Globe.gl's H3 bin layer, and raised hotspots use merged point markers. Heat-map smoothing can still extend slightly past coastlines.
 
 ## Dataset
 

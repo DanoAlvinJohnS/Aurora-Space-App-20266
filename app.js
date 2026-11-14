@@ -18,6 +18,7 @@ let lite = (() => { try { return localStorage.getItem('fg-lite') !== '0'; } catc
 let tab = 'stats', loc = null, view = 'heat', gf = 0, prev = new Map(), cur = [], rk = [], anim = 0;
 const HEX_LIMIT = 6000, LOW_HEX_LIMIT = 2000, HEAT_LIMIT = 1200, LOW_HEAT_LIMIT = 450;
 let light = 'live', mat = null, T = null, sun = { lat: 0, lng: 0 };
+let heatFloor = 0, heatRef = 1;
 
 /* ---------- globe: one merged mesh for all columns, country polygons on top ---------- */
 const globe = Globe()($('#globe'))
@@ -68,6 +69,14 @@ function colorL(l) {
   const value = Number.isFinite(l) ? Math.max(0, Math.min(1, l)) : 0;
   const x = value * (STOPS.length - 1), i = Math.min(Math.floor(x), STOPS.length - 2), f = x - i;
   return `rgb(${STOPS[i].map((v, k) => Math.round(v + (STOPS[i + 1][k] - v) * f))})`;
+}
+function heatLevel(w) {
+  if (!Number.isFinite(w) || w <= 0) return 0;
+  if (heatRef <= heatFloor) return 1;
+  if (w <= heatFloor) return 0;
+  const value = (Math.log1p(w) - Math.log1p(heatFloor)) / (Math.log1p(heatRef) - Math.log1p(heatFloor));
+  const x = Math.max(0, Math.min(1, value));
+  return x * x * (3 - 2 * x);
 }
 
 /* ---------- earth: sharp textures + day / night / live-sun shader ---------- */
@@ -321,13 +330,36 @@ function agg() {
     if (count > positionWeights[g]) { positionWeights[g] = count; positionCells[g] = cell; }
   }
   let mx = 1; for (let g = 0; g < grid.length; g++) if (grid[g] > mx) mx = grid[g];
-  ref = mx; const pts = [];
+  ref = mx;
+  const heatGrid = new Float32Array(grid.length), heatValues = [];
+  const kernel = [1, 2, 1];
+  const GH = M.ny / res;
+  for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < W; gx++) {
+    let sum = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      const ny = Math.max(0, Math.min(GH - 1, gy + dy));
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = (gx + dx + W) % W;
+        sum += grid[ny * W + nx] * kernel[dy + 1] * kernel[dx + 1];
+      }
+    }
+    const average = sum / 16;
+    heatGrid[gy * W + gx] = average;
+    if (average > 0) heatValues.push(average);
+  }
+  heatValues.sort((a, b) => a - b);
+  const thresholdIndex = Math.min(heatValues.length - 1, Math.floor(heatValues.length * .6));
+  const nextHeatFloor = heatValues.length ? heatValues[thresholdIndex] : 0;
+  const nextHeatRef = heatValues.length ? heatValues[heatValues.length - 1] : 1;
+  const pts = [];
   for (let g = 0; g < grid.length; g++) {
     const v = grid[g]; if (!v) continue;
     const cell = positionCells[g], iy = (cell / M.nx) | 0, ix = cell - iy * M.nx;
-    pts.push({ lat: 90 - (iy + .5) * 180 / M.ny, lng: -180 + (ix + .5) * 360 / M.nx, v, i: g });
+    pts.push({ lat: 90 - (iy + .5) * 180 / M.ny, lng: -180 + (ix + .5) * 360 / M.nx, v, hv: heatGrid[g], i: g });
   }
-  pts.sort((a, b) => a.v - b.v); r = { pts, total, cs, res, ref }; memo.set(k, r); if (memo.size > 20) memo.delete(memo.keys().next().value);
+  pts.sort((a, b) => a.v - b.v);
+  r = { pts, total, cs, res, ref, heatFloor: nextHeatFloor, heatRef: nextHeatRef };
+  memo.set(k, r); if (memo.size > 20) memo.delete(memo.keys().next().value);
   return r;
 }
 function hexLimit() {
@@ -390,6 +422,7 @@ function setView(v, quiet) {
 function draw() {
   const r = agg(), y = $('#year').value, y0 = M.years[0];
   prev = view === 'raised' && !lite ? new Map(cur.map(q => [q.i, q])) : new Map();
+  heatFloor = r.heatFloor; heatRef = r.heatRef;
   cur = r.pts; cur.res = r.res; run(); paintHeat();
   $('#count').textContent = fmt(r.total);
   $('#countlabel').textContent = normalizationOn() ? 'MODIS-equivalent detections' : 'detections shown';
@@ -398,7 +431,7 @@ function draw() {
   const L = (e, t, col) => ({ lat: countries[e[0]].lat, lng: countries[e[0]].lng, text: t + countries[e[0]].name, color: col });
   globe.labelsData([]);
   hiI = sel < 0 && rk.length > 1 ? rk[0][0] : -1; loI = sel < 0 && rk.length > 1 ? rk[rk.length - 1][0] : -1; updateNames();
-  list(); detail();
+  detail();
 }
 const redraw = () => {
   clearTimeout(drawTimer);
@@ -614,7 +647,8 @@ function paintHeat() {
   if (view === 'heat') {
     const d = W / 360 * (cur.res || 2) * 4.2;
     for (const q of cur) {                            // cur is sorted weak to strong, so hot spots end up on top
-      const l = level(q.v); if (l < .01) continue;
+      const l = heatLevel(q.hv);
+      if (l < .02) continue;
       hx.globalAlpha = Math.min(1, .3 + l);
       hx.drawImage(sprite(Math.round(l * 15)), (q.lng + 180) / 360 * W - d / 2, (90 - q.lat) / 180 * H - d / 2, d, d);
     }
@@ -643,12 +677,6 @@ function pickNow(i) {
 }
 function clearNow() { sel = -1; loc = null; globe.ringsData([]); fadeTo(0); draw(); materialize($('#detail'), { dx: 0, dy: 8 }); }
 
-function list() {
-  const q = $('#csearch').value.trim().toLowerCase(), cs = agg().cs;
-  const rows = countries.map((c, i) => [i, cs[i]]).filter(([i, n]) => n > 0 && countries[i].name.toLowerCase().includes(q)).sort((a, b) => b[1] - a[1]);
-  $('#clist').innerHTML = rows.map(([i, n]) => `<button class="ci${i === sel ? ' sel' : ''}" data-i="${i}"><span>${countries[i].name}</span><span class="hint">${fmt(n)}</span></button>`).join('') || '<p class="hint">No countries with detections.</p>';
-}
-
 /* ---------- panel: overview first, then Statistics / History / Locations ---------- */
 const TOP = new Map(), TABS = [['stats', 'Statistics'], ['hist', 'History'], ['loc', 'Locations']];
 const row = (a, b) => `<div class="evt"><span>${a}</span><span>${b}</span></div>`;
@@ -671,7 +699,7 @@ function overview() {
   if (!rk.length) return '<p class="hint">No detections for these filters.</p>';
   const mean = rk.reduce((a, r) => a + r[1], 0) / rk.length, hi = rk[0], lo = rk[rk.length - 1];
   const t = (l, e, v) => `<button class="tile" ${e ? `data-i="${e[0]}"` : ''}><span class="hint">${l}</span><b>${v}</b><span>${e ? countries[e[0]].name : 'per country'}</span></button>`;
-  return `<h3>Overview</h3><div class="tiles">${t('Mean', null, fmt(mean))}${t('Highest', hi, fmt(hi[1]))}${t('Lowest', lo, fmt(lo[1]))}</div><p class="hint">Click a country on the globe (or Highest / Lowest) to see its statistics, history and specific locations.</p>`;
+  return `<div class="overview"><h3>Overview</h3><div class="tiles">${t('Mean', null, fmt(mean))}${t('Highest', hi, fmt(hi[1]))}${t('Lowest', lo, fmt(lo[1]))}</div><p class="hint">Click a country on the globe (or Highest / Lowest) to see its statistics, history and specific locations.</p></div>`;
 }
 function detail() {
   const box = $('#detail');
@@ -696,12 +724,12 @@ function detail() {
 function activateSidebarTab(name) {
   const dashboard = name === 'dashboard';
   $('#dashboard-tab').setAttribute('aria-selected', dashboard);
-  $('#settings-tab').setAttribute('aria-selected', !dashboard);
+  $('#explore-tab').setAttribute('aria-selected', !dashboard);
   $('#dashboard-panel').hidden = !dashboard;
-  $('#settings-panel').hidden = dashboard;
+  $('#explore-panel').hidden = dashboard;
 }
 document.querySelectorAll('.sidebar-tabs [role="tab"]').forEach(button => {
-  button.onclick = () => activateSidebarTab(button.id === 'dashboard-tab' ? 'dashboard' : 'settings');
+  button.onclick = () => activateSidebarTab(button.id === 'dashboard-tab' ? 'dashboard' : 'explore');
 });
 let expandedSidebarWidth = '';
 $('#collapse').onclick = () => {
@@ -731,8 +759,6 @@ resizeHandle.addEventListener('pointerdown', e => {
 resizeHandle.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); resizeSidebar($('#controls').getBoundingClientRect().width + (e.key === 'ArrowRight' ? 16 : -16)); }
 });
-$('#clist').onclick = e => { const b = e.target.closest('.ci'); if (b) pick(+b.dataset.i); };
-$('#csearch').addEventListener('input', list);
 addEventListener('keydown', e => { if (e.key === 'Escape' && sel >= 0) clear(); });
 ['#modis', '#viirs', '#conf', '#cum', '#year', '#res'].forEach(s => $(s).addEventListener('input', redraw));
 $('#conf').addEventListener('input', updateOverlapStatus);
