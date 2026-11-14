@@ -10,7 +10,7 @@ const TEX = {
   topo:  ['assets/earth-topology.png', CDN + 'earth-topology.png'],
 };
 const STOPS = [[255,224,138],[255,138,26],[214,18,40],[122,0,25]];
-const ATMO = { day: '#7db4ff', night: '#4d5f9a', live: '#6c9cf5' };
+const ATMO = { day: '#a78bfa', night: '#6d28d9', live: '#8b5cf6' };
 
 let ref = 1, timer = null, raf = 0, drawTimer = null, sel = -1;
 let lite = (() => { try { return localStorage.getItem('fg-lite') !== '0'; } catch (e) { return true; } })();   // low-end mode is ON by default; the choice is remembered
@@ -199,7 +199,7 @@ async function boot() {
     catch (e) { gj = await (await fetch('https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')).json(); }
     gj.features.forEach((f, i) => f.__i = i);
     FEATS = gj.features;
-    globe.pathPointLat(p => p[1]).pathPointLng(p => p[0]).pathPointAlt(() => .015).pathColor(() => '#ffb366').pathStroke(1.6).pathTransitionDuration(0).pathsData([]);
+    globe.pathPointLat(p => p[1]).pathPointLng(p => p[0]).pathPointAlt(() => .015).pathColor(() => '#c084fc').pathStroke(1.6).pathTransitionDuration(0).pathsData([]);
     paint(); globe.polygonsData(gj.features);
   } catch (e) {
     console.warn(e);
@@ -399,19 +399,19 @@ const CSS_UI = `.sk{display:block;height:14px;border-radius:10px;margin:10px 0;b
 @keyframes shim{to{background-position:-200% 0}}
 .busy{position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
 .busy[hidden]{display:none}.busy.on{opacity:1}
-.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#ff7a1a;border-radius:50%;animation:rot .7s linear infinite}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#a855f7;border-radius:50%;animation:rot .7s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
 .progress.ind i{width:40%!important;animation:ind 1s ease-in-out infinite alternate}
 @keyframes ind{from{margin-left:0}to{margin-left:60%}}
-.here{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:10px;align-items:baseline;padding:6px 18px;border-radius:999px;color:#f4efe9;font:inherit;font-size:13px;cursor:pointer}
-.here b{font-size:15px}.here span{color:#b9b0c4;font-size:12px}.here[hidden]{display:none}
+.here{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:10px;align-items:baseline;padding:6px 18px;border-radius:999px;color:#f5f0ff;font:inherit;font-size:13px;cursor:pointer}
+.here b{font-size:15px}.here span{color:#b4a7d6;font-size:12px}.here[hidden]{display:none}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-corner{background:transparent}::-webkit-scrollbar-button{display:none}
-::-webkit-scrollbar-thumb{background:linear-gradient(#ff9a3c,#d61228);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
-::-webkit-scrollbar-thumb:hover{background:linear-gradient(#ffb366,#e8350f);background-clip:padding-box}
-@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:rgba(255,138,26,.6) transparent}}
+::-webkit-scrollbar-thumb{background:linear-gradient(#a855f7,#6d28d9);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(#c084fc,#7c3aed);background-clip:padding-box}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:rgba(168,85,247,.6) transparent}}
 input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:6px;background:rgba(255,255,255,.16);outline:none;cursor:pointer}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#ffb366,#e8350f);border:2px solid rgba(255,255,255,.35);box-shadow:0 0 10px rgba(255,122,26,.6)}
-input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#ffb366,#e8350f);border:2px solid rgba(255,255,255,.35)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#c084fc,#7c3aed);border:2px solid rgba(255,255,255,.35);box-shadow:0 0 10px rgba(168,85,247,.7)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#c084fc,#7c3aed);border:2px solid rgba(255,255,255,.35)}
 input[type=range]::-moz-range-track{height:6px;border-radius:6px;background:rgba(255,255,255,.16)}`;
 function ensureUI() {                                  // makes the loaders work even if index.html / style.css are older
   if (!document.getElementById('fg-css')) { const st = document.createElement('style'); st.id = 'fg-css'; st.textContent = CSS_UI; document.head.appendChild(st); }
@@ -535,7 +535,7 @@ function setSelPath() {                                // the selected country's
       const pts = [];
       for (const [lng, lat] of r) { const u = (lng + 180) / 360 * 2 * Math.PI, th = (90 - lat) * Math.PI / 180; pts.push(-101.7 * Math.cos(u) * Math.sin(th), 101.7 * Math.cos(th), 101.7 * Math.sin(u) * Math.sin(th)); }
       const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pts, 3));
-      g.add(new T.LineLoop(geo, new T.LineBasicMaterial({ color: 0xffb366 })));
+      g.add(new T.LineLoop(geo, new T.LineBasicMaterial({ color: 0xc084fc })));
     }
     g.rotation.y = -Math.PI / 2; g.traverse(o => { o.raycast = () => {}; o.renderOrder = 5; }); selLine = g; globe.scene().add(g);
   }
@@ -568,7 +568,7 @@ function paintHeat() {
 /* ---------- countries ---------- */
 function paint() {                                    // polygons only catch clicks when the overlay layers are available
   if (heat && lab) { globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(() => 'rgba(0,0,0,0)'); return; }
-  globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(p => p.__i === sel ? '#ffb366' : 'rgba(255,255,255,.5)');
+  globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(p => p.__i === sel ? '#c084fc' : 'rgba(216,180,254,.35)');
 }
 function fadeTo(t) { gf = t; fadeNext = true; if (!(heat && lab)) paint(); }
 function pick(i) { busy('Loading ' + countries[i].name + ' …', () => pickNow(i)); }
