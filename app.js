@@ -1,3 +1,4 @@
+import { spring, materialize, reduced } from './motion.js';
 const $ = s => document.querySelector(s);
 
 /* ---------- settings ---------- */
@@ -10,7 +11,7 @@ const TEX = {
   topo:  ['assets/earth-topology.png', CDN + 'earth-topology.png'],
 };
 const STOPS = [[255,224,138],[255,138,26],[214,18,40],[122,0,25]];
-const ATMO = { day: '#7db4ff', night: '#4d5f9a', live: '#6c9cf5' };
+const ATMO = { day: '#8db4ff', night: '#3b5bc4', live: '#4a7ff8' };
 
 let ref = 1, timer = null, raf = 0, drawTimer = null, sel = -1;
 let lite = (() => { try { return localStorage.getItem('fg-lite') !== '0'; } catch (e) { return true; } })();   // low-end mode is ON by default; the choice is remembered
@@ -41,7 +42,20 @@ const globe = Globe()($('#globe'))
 globe.controls().autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches && !lite;
 globe.controls().autoRotateSpeed = 0.4;
 const fit = () => { globe.renderer().setPixelRatio(lite ? 1 : Math.min(devicePixelRatio || 1, 1.5)); globe.width(innerWidth).height(innerHeight); };
-addEventListener('resize', fit); fit();
+addEventListener('resize', () => { fit(); updateNames(); }); fit();
+
+/* ---------- spring camera: starts from where the globe is NOW, keeps its velocity if interrupted ---------- */
+let cam = null;
+function flyTo(t, instant) {
+  const p = globe.pointOfView();
+  const v0 = cam ? cam.velocity() : undefined;
+  if (cam) { cam.stop(); cam = null; }
+  if (instant || lite || reduced.v) { globe.pointOfView(t, 0); return; }
+  const dl = (((t.lng - p.lng + 540) % 360) + 360) % 360 - 180;            // shortest way round the planet
+  cam = spring([p.lat, p.lng, p.altitude], [t.lat, p.lng + dl, t.altitude], { response: .5, damping: 1, velocity: v0, eps: .01 },
+    ([lat, lng, altitude]) => globe.pointOfView({ lat, lng, altitude }, 0), () => { cam = null; });
+}
+['pointerdown', 'wheel', 'touchstart'].forEach(ev => $('#globe').addEventListener(ev, () => { if (cam) { cam.stop(); cam = null; } }, { capture: true, passive: true }));   // grabbing the globe always wins
 
 function level(w) {
   const scale = Math.log1p(ref);
@@ -158,7 +172,7 @@ function setLighting(m) {
   if (live) updateSun();
 }
 document.querySelectorAll('.seg button').forEach(b => b.onclick = () => setLighting(b.dataset.mode));
-$('#sunbtn').onclick = () => { updateSun(); globe.controls().autoRotate = false; globe.pointOfView({ lat: sun.lat, lng: sun.lng, altitude: 2.2 }, 1200); };
+$('#sunbtn').onclick = () => { updateSun(); globe.controls().autoRotate = false; flyTo({ lat: sun.lat, lng: sun.lng, altitude: 2.2 }); };
 setInterval(() => { if (light === 'live') updateSun(); }, 15000);
 
 /* ---------- prepared dataset (made once by preprocess.py, cached in the browser) ---------- */
@@ -199,7 +213,7 @@ async function boot() {
     catch (e) { gj = await (await fetch('https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')).json(); }
     gj.features.forEach((f, i) => f.__i = i);
     FEATS = gj.features;
-    globe.pathPointLat(p => p[1]).pathPointLng(p => p[0]).pathPointAlt(() => .015).pathColor(() => '#ffb366').pathStroke(1.6).pathTransitionDuration(0).pathsData([]);
+    globe.pathPointLat(p => p[1]).pathPointLng(p => p[0]).pathPointAlt(() => .015).pathColor(() => '#ffc757').pathStroke(1.6).pathTransitionDuration(0).pathsData([]);
     paint(); globe.polygonsData(gj.features);
   } catch (e) {
     console.warn(e);
@@ -210,11 +224,12 @@ async function boot() {
   $('#meta').textContent = `${M.rows.toLocaleString()} detections, ${cached ? 'loaded from cache' : 'downloaded'} in ${((performance.now() - t0) / 1000).toFixed(1)} s`;
   $('#lmsg').textContent = 'Building the map …'; $('#lbar').style.width = '100%'; $('.progress').classList.add('ind');
   await nextPaint();                                   // let the skeleton paint before the heavy first draw
-  ['#status', '#controls', '#timeline'].forEach(s => $(s).hidden = false);
+  ['#controls', '#timeline'].forEach(s => $(s).hidden = false);
+  materialize($('#controls'), { dx: -18, dy: 0 });
   configureOverlap();
   $('#lite').checked = lite; if (lite) $('#res').value = '2'; setView(view, true);
   detail(); draw();
-  await nextPaint(); $('#loading').hidden = true; updateHere(true);
+  await nextPaint(); $('#loading').hidden = true; updateHere(true); updateNames();
 }
 
 /* ---------- aggregation: one pass over the summary, memoised per setting ---------- */
@@ -381,7 +396,8 @@ function draw() {
   $('#yl').textContent = $('#cum').checked && +y > y0 ? `${y0}-${y}` : y;
   rk = []; countries.forEach((c, i) => r.cs[i] > 0 && rk.push([i, r.cs[i]])); rk.sort((a, b) => b[1] - a[1]);
   const L = (e, t, col) => ({ lat: countries[e[0]].lat, lng: countries[e[0]].lng, text: t + countries[e[0]].name, color: col });
-  globe.labelsData(sel < 0 && rk.length > 1 ? [L(rk[0], 'Highest: ', '#ffe08a'), L(rk[rk.length - 1], 'Lowest: ', '#9fd0ff')] : []);
+  globe.labelsData([]);
+  hiI = sel < 0 && rk.length > 1 ? rk[0][0] : -1; loI = sel < 0 && rk.length > 1 ? rk[rk.length - 1][0] : -1; updateNames();
   list(); detail();
 }
 const redraw = () => {
@@ -393,26 +409,26 @@ const redraw = () => {
 const nextPaint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
 const SKEL = '<div class="skel"><i class="sk c"></i><i class="sk"></i><i class="sk s"></i><i class="sk b"></i></div>';
 let busyN = 0;
-const CSS_UI = `.sk{display:block;height:14px;border-radius:10px;margin:10px 0;background:linear-gradient(90deg,rgba(255,255,255,.07) 25%,rgba(255,255,255,.2) 50%,rgba(255,255,255,.07) 75%);background-size:200% 100%;animation:shim 1.2s infinite linear}
+const CSS_UI = `.sk{display:block;height:14px;border-radius:10px;margin:10px 0;background:linear-gradient(90deg,rgba(255,255,255,.06) 25%,rgba(255,255,255,.16) 50%,rgba(255,255,255,.06) 75%);background-size:200% 100%;animation:shim 1.2s infinite linear}
 .sk.c{width:54px;height:54px;border-radius:50%}.sk.s{width:60%}.sk.b{height:70px;border-radius:16px}
 .skrow{display:flex;gap:10px;justify-content:center;margin:12px 0}.skrow .sk{width:46px;height:46px;border-radius:50%;margin:0}
 @keyframes shim{to{background-position:-200% 0}}
 .busy{position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
 .busy[hidden]{display:none}.busy.on{opacity:1}
-.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#ff7a1a;border-radius:50%;animation:rot .7s linear infinite}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#7aa2ff;border-radius:50%;animation:rot .7s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
 .progress.ind i{width:40%!important;animation:ind 1s ease-in-out infinite alternate}
 @keyframes ind{from{margin-left:0}to{margin-left:60%}}
-.here{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:10px;align-items:baseline;padding:6px 18px;border-radius:999px;color:#f4efe9;font:inherit;font-size:13px;cursor:pointer}
-.here b{font-size:15px}.here span{color:#b9b0c4;font-size:12px}.here[hidden]{display:none}
+.here{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:10px;align-items:baseline;padding:6px 18px;border-radius:999px;color:#fff;font:inherit;font-size:13px;cursor:pointer}
+.here b{font-size:15px}.here span{color:#8e8e93;font-size:12px}.here[hidden]{display:none}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-corner{background:transparent}::-webkit-scrollbar-button{display:none}
-::-webkit-scrollbar-thumb{background:linear-gradient(#ff9a3c,#d61228);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
-::-webkit-scrollbar-thumb:hover{background:linear-gradient(#ffb366,#e8350f);background-clip:padding-box}
-@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:rgba(255,138,26,.6) transparent}}
-input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:6px;background:rgba(255,255,255,.16);outline:none;cursor:pointer}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#ffb366,#e8350f);border:2px solid rgba(255,255,255,.35);box-shadow:0 0 10px rgba(255,122,26,.6)}
-input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#ffb366,#e8350f);border:2px solid rgba(255,255,255,.35)}
-input[type=range]::-moz-range-track{height:6px;border-radius:6px;background:rgba(255,255,255,.16)}`;
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.45);background-clip:padding-box}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent}}
+input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:5px;background:rgba(120,120,128,.4);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#fff;border:0;box-shadow:0 1px 5px rgba(0,0,0,.35),0 0 0 .5px rgba(0,0,0,.08)}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:0;box-shadow:0 1px 5px rgba(0,0,0,.35)}
+input[type=range]::-moz-range-track{height:5px;border-radius:5px;background:rgba(120,120,128,.4)}`;
 function ensureUI() {                                  // makes the loaders work even if index.html / style.css are older
   if (!document.getElementById('fg-css')) { const st = document.createElement('style'); st.id = 'fg-css'; st.textContent = CSS_UI; document.head.appendChild(st); }
   if (!$('#busy')) { const b = document.createElement('div'); b.id = 'busy'; b.className = 'glass busy'; b.hidden = true; b.innerHTML = '<i class="spin"></i><span id="busytxt"></span>'; document.body.appendChild(b); }
@@ -420,7 +436,7 @@ function ensureUI() {                                  // makes the loaders work
   const lt = $('#lite');
   if (lt && !$('#hop')) {
     let v = 50; try { v = +localStorage.getItem('fg-hop') || 50; } catch (e) { /* ignore */ }
-    lt.closest('label').insertAdjacentHTML('afterend', `<label class="row">Heat map opacity: <b id="hopv">${v}</b>%<input type="range" id="hop" min="10" max="100" value="${v}"></label>`);
+    lt.closest('label').insertAdjacentHTML('afterend', `<label class="row"><span>Heat map opacity: <b id="hopv">${v}</b>%</span><input type="range" id="hop" min="10" max="100" value="${v}"></label>`);
   }
   const ld = $('#loading'), h = ld && ld.querySelector('h1');
   if (h && !ld.querySelector('.skrow')) h.insertAdjacentHTML('afterend', '<div class="skrow"><i class="sk"></i><i class="sk"></i><i class="sk"></i><i class="sk"></i></div>');
@@ -477,10 +493,9 @@ function paintMask() {                                  // the shader blurs (mip
   const t0 = performance.now(), st = t => { const p = Math.min(1, (t - t0) / 450); u.value = from + (to - from) * p; if (p < 1) maskRaf = requestAnimationFrame(st); };
   maskRaf = requestAnimationFrame(st);
 }
-function paintOutlines() {                              // crisp borders + every country name, drawn once per size / selection
+function paintOutlines() {                              // crisp borders, drawn once per size / selection (names are DOM text, see updateNames)
   if (!lab || !FEATS.length) return;
-  const alt = (globe.pointOfView() || {}).altitude || 2.5, tier = sel >= 0 || alt < 1.5 ? 2 : 1;   // zoomed out: only bigger countries get a name
-  const W = lite ? 2048 : 4096, H = W / 2, key = W + '|' + sel + '|' + tier;
+  const W = lite ? 2048 : 4096, H = W / 2, key = W + '|' + sel;
   if (key === oKey) return; oKey = key;
   if (!BBW.length) BBW = FEATS.map(f => { const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates; return Math.max(...polys.map(p => { const xs = p[0].map(c => c[0]); return Math.max(...xs) - Math.min(...xs); })); });
   if (oc.width !== W) { oc.width = W; oc.height = H; lab.userData.tx.dispose(); }
@@ -488,23 +503,71 @@ function paintOutlines() {                              // crisp borders + every
   const u = W / 2048;
   ox.lineWidth = u * 1.1; ox.strokeStyle = 'rgba(255,255,255,.55)'; ox.beginPath();
   FEATS.forEach((f, i) => { if (i !== sel) tracePath(f, W, H, ox); }); ox.stroke();
-  ox.textAlign = 'center'; ox.textBaseline = 'middle';
-  const placed = [], order = countries.map((c, k) => k).sort((a, b) => (b === sel) - (a === sel) || BBW[b] - BBW[a]);   // big countries first, so they win the space
-  for (const i of order) {
-    const c = countries[i];
-    if (tier === 1 && BBW[i] < 7 && i !== sel) continue;
-    const lat = c.lat * Math.PI / 180, sx = Math.min(1.8, 1 / Math.max(.3, Math.cos(lat)));            // undo the stretching near the poles
-    const fs = Math.max(u * (tier === 1 ? 12 : 10), Math.min(u * (tier === 1 ? 26 : 34), BBW[i] / 360 * W / c.name.length * 1.5)) * Math.max(.6, Math.cos(lat) ** .5);
-    ox.font = `${i === sel ? 700 : 600} ${fs}px "Bricolage Grotesque", system-ui, sans-serif`;
-    const x = (c.lng + 180) / 360 * W, y = (90 - c.lat) / 180 * H, w = ox.measureText(c.name).width * sx, pad = u * 3;
-    const hit = placed.some(r => Math.abs(r.x - x) < (r.w + w) / 2 + pad && Math.abs(r.y - y) < (r.h + fs) / 2 + pad);
-    if (hit && i !== sel) continue;                                                                      // no overlapping names
-    placed.push({ x, y, w, h: fs });
-    ox.save(); ox.translate(x, y); ox.scale(sx, 1);
-    ox.globalAlpha = sel < 0 || i === sel ? .95 : .4; ox.lineWidth = fs * .13; ox.strokeStyle = 'rgba(0,0,0,.6)'; ox.fillStyle = '#fff';
-    ox.strokeText(c.name, 0, 0); ox.fillText(c.name, 0, 0); ox.restore();
-  }
   ox.globalAlpha = 1; lab.userData.tx.needsUpdate = true;
+}
+
+/* ---------- country names: ONE size for every country, shown only on the side facing you ---------- */
+let hiI = -1, loI = -1, namesRaf = 0, NB = null;
+const NAME_PX = 11, FACE_DEG = 42, nameEls = [], nctx = document.createElement('canvas').getContext('2d');
+nctx.font = `600 ${NAME_PX}px "Bricolage Grotesque", system-ui, sans-serif`;
+const nameW = new Map();
+const textW = i => nameW.get(i) ?? (nameW.set(i, nctx.measureText(countries[i].name).width + 6), nameW.get(i));
+function nameBoxes() {                                   // each country's biggest piece, in degrees (width, height)
+  if (NB) return NB;
+  return NB = FEATS.map(f => {
+    const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    let best = [0, 0];
+    for (const p of polys) {
+      let x0 = 181, x1 = -181, y0 = 91, y1 = -91;
+      for (const [x, y] of p[0]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      if (x1 - x0 > best[0]) best = [x1 - x0, y1 - y0];
+    }
+    return best;
+  });
+}
+function updateNames() {
+  if (namesRaf) return;
+  namesRaf = requestAnimationFrame(() => { namesRaf = 0; drawNames(); });
+}
+function drawNames() {
+  const host = $('#names'); if (!host || !countries.length || !FEATS.length) return;
+  if (!nameEls.length) countries.forEach((c, i) => { const s = document.createElement('span'); s.className = 'cn'; s.textContent = c.name; host.appendChild(s); nameEls[i] = s; });
+  const p = globe.pointOfView(), rad = Math.PI / 180, bb = nameBoxes();
+  const sb = $('#controls').getBoundingClientRect().right, W = innerWidth, H = innerHeight;
+  const cand = [];
+  for (let i = 0; i < countries.length; i++) {
+    const c = countries[i];
+    if (sel >= 0 && i !== sel) continue;                 // a country is open: only its name
+    const cosd = Math.sin(p.lat * rad) * Math.sin(c.lat * rad) + Math.cos(p.lat * rad) * Math.cos(c.lat * rad) * Math.cos((p.lng - c.lng) * rad);
+    if (cosd < Math.cos(FACE_DEG * rad)) continue;       // not facing you
+    const o = globe.getScreenCoords(c.lat, c.lng, 0.002); if (!o) continue;
+    if (o.x < sb + 8 || o.x > W - 8 || o.y < 8 || o.y > H - 8) continue;   // behind the sidebar or off screen
+    const w = textW(i), forced = i === sel || i === hiI || i === loI;
+    let room = Infinity;
+    if (!forced) {                                       // the name must fit inside the country, so it never touches borders or neighbours
+      const hw = bb[i][0] / 2, hh = bb[i][1] / 2;
+      const l = globe.getScreenCoords(c.lat, c.lng - hw, 0.002), r = globe.getScreenCoords(c.lat, c.lng + hw, 0.002);
+      const t = globe.getScreenCoords(Math.min(89, c.lat + hh), c.lng, 0.002), u = globe.getScreenCoords(Math.max(-89, c.lat - hh), c.lng, 0.002);
+      if (!l || !r || !t || !u) continue;
+      const pw = Math.hypot(r.x - l.x, r.y - l.y), ph = Math.hypot(t.x - u.x, t.y - u.y);
+      if (pw < w * 1.1 || ph < NAME_PX * 1.6) continue;
+      room = pw;
+    }
+    cand.push({ i, x: o.x, y: o.y, w, room, forced });
+  }
+  cand.sort((a, b) => (b.forced - a.forced) || (b.room - a.room));
+  const placed = [], show = new Set();
+  for (const q of cand) {
+    const h = NAME_PX + 4;
+    if (!q.forced && placed.some(r => Math.abs(r.x - q.x) < (r.w + q.w) / 2 + 4 && Math.abs(r.y - q.y) < (r.h + h) / 2 + 2)) continue;
+    placed.push({ x: q.x, y: q.y, w: q.w, h }); show.add(q.i);
+    const el = nameEls[q.i];
+    el.style.transform = `translate(${Math.round(q.x)}px,${Math.round(q.y)}px) translate(-50%,-50%)`;
+    el.className = 'cn' + (q.i === sel ? ' sel' : q.i === hiI ? ' hi' : q.i === loI ? ' lo' : '');
+    el.title = q.i === hiI ? 'Most burning' : q.i === loI ? 'Least burning' : '';
+    el.style.display = 'block';
+  }
+  nameEls.forEach((el, i) => { if (!show.has(i) && el.style.display !== 'none') el.style.display = 'none'; });
 }
 const GEO = [];
 function geoIndex() {
@@ -535,7 +598,7 @@ function setSelPath() {                                // the selected country's
       const pts = [];
       for (const [lng, lat] of r) { const u = (lng + 180) / 360 * 2 * Math.PI, th = (90 - lat) * Math.PI / 180; pts.push(-101.7 * Math.cos(u) * Math.sin(th), 101.7 * Math.cos(th), 101.7 * Math.sin(u) * Math.sin(th)); }
       const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pts, 3));
-      g.add(new T.LineLoop(geo, new T.LineBasicMaterial({ color: 0xffb366 })));
+      g.add(new T.LineLoop(geo, new T.LineBasicMaterial({ color: 0xffc757 })));
     }
     g.rotation.y = -Math.PI / 2; g.traverse(o => { o.raycast = () => {}; o.renderOrder = 5; }); selLine = g; globe.scene().add(g);
   }
@@ -568,17 +631,17 @@ function paintHeat() {
 /* ---------- countries ---------- */
 function paint() {                                    // polygons only catch clicks when the overlay layers are available
   if (heat && lab) { globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(() => 'rgba(0,0,0,0)'); return; }
-  globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(p => p.__i === sel ? '#ffb366' : 'rgba(255,255,255,.5)');
+  globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(p => p.__i === sel ? '#ffc757' : 'rgba(255,255,255,.35)');
 }
 function fadeTo(t) { gf = t; fadeNext = true; if (!(heat && lab)) paint(); }
 function pick(i) { busy('Loading ' + countries[i].name + ' …', () => pickNow(i)); }
 function clear() { busy('Back to overview …', clearNow); }
 function pickNow(i) {
   sel = i; tab = 'stats'; loc = null; globe.ringsData([]); globe.controls().autoRotate = false; fadeTo(1);
-  globe.pointOfView({ lat: countries[i].lat, lng: countries[i].lng, altitude: 1.8 }, lite ? 0 : 1000);
-  draw();
+  flyTo({ lat: countries[i].lat, lng: countries[i].lng, altitude: 1.8 });
+  draw(); materialize($('#detail'), { dx: -14, dy: 0 });
 }
-function clearNow() { sel = -1; loc = null; globe.ringsData([]); fadeTo(0); draw(); }
+function clearNow() { sel = -1; loc = null; globe.ringsData([]); fadeTo(0); draw(); materialize($('#detail'), { dx: 0, dy: 8 }); }
 
 function list() {
   const q = $('#csearch').value.trim().toLowerCase(), cs = agg().cs;
@@ -629,6 +692,45 @@ function detail() {
 }
 
 /* ---------- wiring ---------- */
+/* ---------- sidebar (layout from 2nd.rar) ---------- */
+function activateSidebarTab(name) {
+  const dashboard = name === 'dashboard';
+  $('#dashboard-tab').setAttribute('aria-selected', dashboard);
+  $('#settings-tab').setAttribute('aria-selected', !dashboard);
+  $('#dashboard-panel').hidden = !dashboard;
+  $('#settings-panel').hidden = dashboard;
+}
+document.querySelectorAll('.sidebar-tabs [role="tab"]').forEach(button => {
+  button.onclick = () => activateSidebarTab(button.id === 'dashboard-tab' ? 'dashboard' : 'settings');
+});
+let expandedSidebarWidth = '';
+$('#collapse').onclick = () => {
+  const collapsed = $('#controls').classList.toggle('is-collapsed');
+  if (collapsed) { expandedSidebarWidth = $('#controls').style.width; $('#controls').style.width = '58px'; }
+  else $('#controls').style.width = expandedSidebarWidth;
+  $('#collapse').setAttribute('aria-expanded', !collapsed);
+  $('#collapse').setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+  setTimeout(updateNames, 0);
+};
+const resizeHandle = $('#resize-handle');
+function resizeSidebar(width) {
+  const styles = getComputedStyle($('#controls'));
+  const min = Math.max(220, parseFloat(styles.minWidth) || 0), max = parseFloat(styles.maxWidth) || innerWidth;
+  $('#controls').style.width = `${Math.max(min, Math.min(max, width))}px`;
+  updateNames();
+}
+resizeHandle.addEventListener('pointerdown', e => {
+  if ($('#controls').classList.contains('is-collapsed')) return;
+  e.preventDefault();
+  const startX = e.clientX, startWidth = $('#controls').getBoundingClientRect().width;
+  resizeHandle.setPointerCapture(e.pointerId);
+  const move = ev => resizeSidebar(startWidth + ev.clientX - startX);
+  const stop = () => { ['pointermove', 'pointerup', 'pointercancel'].forEach((t, k) => resizeHandle.removeEventListener(t, k ? stop : move)); };
+  resizeHandle.addEventListener('pointermove', move); resizeHandle.addEventListener('pointerup', stop); resizeHandle.addEventListener('pointercancel', stop);
+});
+resizeHandle.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); resizeSidebar($('#controls').getBoundingClientRect().width + (e.key === 'ArrowRight' ? 16 : -16)); }
+});
 $('#clist').onclick = e => { const b = e.target.closest('.ci'); if (b) pick(+b.dataset.i); };
 $('#csearch').addEventListener('input', list);
 addEventListener('keydown', e => { if (e.key === 'Escape' && sel >= 0) clear(); });
@@ -650,8 +752,8 @@ $('#detail').onclick = e => {
   const t = e.target.closest('[data-i],[data-t],[data-l],[data-y],#clr'); if (!t) return;
   if (t.id === 'clr') return clear();
   if (t.dataset.i) return pick(+t.dataset.i);
-  if (t.dataset.t) { tab = t.dataset.t; return detail(); }
-  if (t.dataset.l) { const [la, lo] = t.dataset.l.split(',').map(Number); globe.pointOfView({ lat: la, lng: lo, altitude: 1.1 }, lite ? 0 : 800); return locAt(la, lo); }
+  if (t.dataset.t) { const d = TABS.findIndex(([k]) => k === t.dataset.t) - TABS.findIndex(([k]) => k === tab); tab = t.dataset.t; detail(); return materialize($('#detail'), { dx: Math.sign(d) * 18, dy: 0, from: .99, response: .3 }); }
+  if (t.dataset.l) { const [la, lo] = t.dataset.l.split(',').map(Number); flyTo({ lat: la, lng: lo, altitude: 1.1 }); return locAt(la, lo); }
   if (t.dataset.y !== undefined) { $('#year').value = M.years[0] + +t.dataset.y; redraw(); }
 };
 document.querySelectorAll('#vseg button').forEach(b => b.onclick = () => setView(b.dataset.v));
@@ -665,7 +767,7 @@ document.addEventListener('visibilitychange', () => document.hidden ? globe.paus
 { const ctl = globe.controls(); let rt = 0;           // render at lower resolution while dragging, restore when idle
   ctl.addEventListener('start', () => { clearTimeout(rt); globe.renderer().setPixelRatio(lite ? .6 : .85); });
   ctl.addEventListener('end', () => { clearTimeout(rt); rt = setTimeout(() => { fit(); paintOutlines(); }, 400); });
-  ctl.addEventListener('change', () => updateHere());
+  ctl.addEventListener('change', () => { updateHere(); updateNames(); });
   document.addEventListener('click', e => { const h = e.target.closest('#here'); if (h && +h.dataset.i >= 0) pick(+h.dataset.i); }); }
 await initEarth();
 boot();
