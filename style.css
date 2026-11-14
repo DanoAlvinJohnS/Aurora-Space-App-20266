@@ -19,8 +19,6 @@ p{margin:8px 0}
 .err{color:#f0abfc;min-height:1.2em}
 .btn{background:linear-gradient(135deg,#a855f7,#6d28d9);color:#fff;border:0;border-radius:14px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer}
 .btn.ghost{background:var(--glass);border:1px solid var(--line);width:100%;margin-top:10px}
-.side{position:fixed;top:82px;z-index:3;width:min(300px,90vw);max-height:calc(100vh - 170px);overflow:auto}
-.left{left:16px}.right{right:16px}
 .big{font-size:17px}.big span{font-weight:800;color:var(--ember)}#countlabel{font-weight:400!important;color:var(--ink)!important}
 fieldset{border:1px solid var(--line);border-radius:14px;margin:12px 0;padding:8px 12px}
 legend{color:var(--mute);font-size:13px;padding:0 6px}
@@ -41,7 +39,6 @@ select{background:rgba(0,0,0,.5);color:var(--ink);border:1px solid var(--line);b
 .page .card h2{margin-bottom:8px}
 .team{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .team div{border:1px solid var(--line);border-radius:16px;padding:14px;text-align:center}
-@media(max-width:700px){.side{max-height:40vh}.left{top:76px}.right{top:auto;bottom:90px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 /* --- lighting switch, loading, history panel --- */
@@ -53,7 +50,6 @@ select{background:rgba(0,0,0,.5);color:var(--ink);border:1px solid var(--line);b
 .btn.small{padding:6px 10px;font-size:13px;margin-top:8px}
 .progress{height:8px;border-radius:6px;background:rgba(255,255,255,.12);overflow:hidden;margin:12px 0 6px}
 .progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,#a855f7,#d946ef);transition:width .2s}
-.right{width:min(360px,92vw)}
 .side h3{font-size:13px;color:var(--mute);font-weight:600;margin:16px 0 6px;text-transform:uppercase;letter-spacing:.06em}
 .bars i.peak{background:linear-gradient(#f5d0fe,#c084fc)}
 .bars.m{height:46px}
@@ -101,7 +97,7 @@ button{font-family:inherit}
 .sk.c{width:54px;height:54px;border-radius:50%}.sk.s{width:60%}.sk.b{height:70px;border-radius:16px}
 .skrow{display:flex;gap:10px;justify-content:center;margin:12px 0}.skrow .sk{width:46px;height:46px;border-radius:50%;margin:0}
 @keyframes shim{to{background-position:-200% 0}}
-.busy{position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.busy{position:fixed;top:18px;left:calc(50% + var(--sbw,0px)/2);transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
 .busy[hidden]{display:none}.busy.on{opacity:1}
 .spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--ember);border-radius:50%;animation:rot .7s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
@@ -207,3 +203,47 @@ body.about-page #globe{position:fixed;inset:0;z-index:0;pointer-events:none}
 body.about-page .nav{z-index:5}
 body.about-page .page{position:relative;z-index:2}
 body.about-page .glass{background:linear-gradient(160deg,rgba(26,14,46,.55),rgba(8,4,16,.6));backdrop-filter:blur(8px) saturate(140%);-webkit-backdrop-filter:blur(8px) saturate(140%)}
+
+
+/* ================= SIDEBAR LAYOUT (single left panel: Dashboard / View settings) ================= */
+[hidden]{display:none!important}
+
+.side{position:fixed;top:0;bottom:0;z-index:3;width:33.333vw;min-width:min(280px,90vw);max-width:33.333vw;height:100vh;max-height:none;
+ overflow:auto;scrollbar-width:none;-ms-overflow-style:none}
+.side::-webkit-scrollbar{display:none}
+.left{left:0;border-radius:0 22px 22px 0}
+.side.is-collapsed{width:58px;min-width:58px;padding:14px;overflow:hidden}
+
+.resize-handle{position:fixed;top:0;bottom:0;left:calc(var(--sbw,33.333vw) - 5px);z-index:4;width:10px;cursor:ew-resize;touch-action:none}
+.resize-handle:hover,.resize-handle:focus-visible{background:rgba(168,85,247,.35);outline:0}
+
+.sidebar-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-bottom:14px}
+.sidebar-head h1{margin:0;flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;letter-spacing:.24em;text-transform:uppercase;
+ background:none;color:var(--ink);-webkit-text-fill-color:var(--ink)}
+.sidebar-head h1::before{content:"";width:20px;height:20px;border-radius:50%;flex:none;
+ background:radial-gradient(circle at 35% 35%,#f5d0fe 0,#a855f7 45%,#2e1065 100%);box-shadow:0 0 14px rgba(168,85,247,.9)}
+.about-link{color:var(--mute);text-decoration:none;font-size:14px;padding:6px 14px;border-radius:999px;transition:background .2s,color .2s}
+.about-link:hover{background:rgba(168,85,247,.16);color:#fff}
+.collapse{appearance:none;-webkit-appearance:none;width:30px;height:30px;flex:none;color:var(--ink);font:inherit;font-size:24px;line-height:1;
+ background:rgba(168,85,247,.08);border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:background .2s,box-shadow .2s}
+.collapse:hover{background:rgba(168,85,247,.2);box-shadow:0 0 14px rgba(168,85,247,.35)}
+.side.is-collapsed .sidebar-head{margin:0}
+.side.is-collapsed .sidebar-head>:not(.collapse),.side.is-collapsed .sidebar-tabs,.side.is-collapsed .sidebar-panel{display:none}
+.side.is-collapsed .collapse{transform:rotate(180deg)}
+
+.sidebar-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:0 -4px 14px;padding:3px;background:rgba(0,0,0,.55);border:1px solid rgba(168,85,247,.18);border-radius:12px}
+.sidebar-tabs button{appearance:none;-webkit-appearance:none;background:transparent;border:0;border-radius:9px;color:var(--mute);font:inherit;font-size:13px;padding:8px 4px;cursor:pointer;transition:color .2s,background .2s}
+.sidebar-tabs button:hover{color:#fff}
+.sidebar-tabs button[aria-selected=true]{background:linear-gradient(135deg,#a855f7,#6d28d9);color:#fff;font-weight:700;box-shadow:0 0 14px rgba(168,85,247,.55)}
+.sidebar-panel>h3:first-child{margin-top:4px}
+.sidebar-panel>h2{margin-top:18px}
+#status{margin-top:6px}
+
+/* timeline lives inside the dashboard panel now */
+.sidebar-panel>.tl{position:static;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;width:auto;margin:16px 0;padding:12px;transform:none;border-radius:16px}
+.sidebar-panel>.tl input[type=range]{grid-column:1/-1;grid-row:1}
+.sidebar-panel>.tl .btn{grid-column:1;grid-row:2}
+.sidebar-panel>.tl strong{grid-column:2;grid-row:2;min-width:0}
+.sidebar-panel>.tl label{grid-column:1/-1;grid-row:3}
+
+@media(max-width:700px){.side{width:min(90vw,420px);min-width:0;max-width:90vw}.busy{left:50%}}
