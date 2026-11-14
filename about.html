@@ -22,11 +22,11 @@
   </section>
   <section class="glass card">
     <h2>How it works</h2>
-    <p>FireGlobe reads every FIRMS hotspot CSV in the dataset folder (or any file you drop on the page) and converts MODIS confidence numbers and VIIRS low, nominal and high ratings onto one 0 to 100 scale, then counts detections inside hexagonal areas on the globe. Deeper, taller columns mark areas that burn more often. Use the year slider to watch the history build up, and click any column to open its wildfire history: yearly and seasonal patterns, biggest burning days, strongest detections and the latest activity. Switch between day, night and live sun lighting on the globe.</p>
+    <p>Run the local preprocessing script on FIRMS CSV files in the dataset folder. It harmonizes MODIS and VIIRS confidence into low, nominal and high categories and creates the compact files loaded by the browser. Explore country-attributed activity with the heat map, H3-based 3D hexagon columns, or raised hotspot markers. Use the timeline, sensor and confidence filters, then select a country or location to inspect historical and seasonal patterns.</p>
   </section>
   <section class="glass card">
     <h2>Data</h2>
-    <p>Active fire detections come from NASA FIRMS (Fire Information for Resource Management System). Everything runs in your browser, and your data never leaves your computer.</p>
+    <p>Fire detections come from NASA FIRMS (Fire Information for Resource Management System). The map and its global counter omit cells without a country assignment; heat-map smoothing can extend slightly past coastlines. When MODIS and VIIRS data overlap from 2012 onward, an optional global count-rate adjustment scales VIIRS to the MODIS overlap total. This is a relative adjustment, not a correction for differences in sensor sensitivity or burned area. Preprocessing and visualization run locally; the app has no project backend.</p>
   </section>
   <section class="glass card">
     <h2>Team</h2>

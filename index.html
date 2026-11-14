@@ -24,7 +24,7 @@
 <!-- LEFT: status, data and graphs -->
 <aside id="status" class="glass card side left" hidden>
   <h2>Burning activity</h2>
-  <p class="big"><span id="count">0</span> detections shown</p>
+  <p class="big"><span id="count">0</span> <span id="countlabel">detections shown</span></p>
   <p id="meta" class="hint"></p>
   <div class="legend"><span>Rarely burns</span><i></i><span>Burns often</span></div>
   <div id="detail"></div>
@@ -43,12 +43,18 @@
     <button id="sunbtn" class="btn ghost small" hidden>Turn to the sun</button>
   </fieldset>
   <fieldset><legend>Map</legend>
-    <div class="seg2" id="vseg"><button type="button" data-v="heat" aria-pressed="true">Heat map</button><button type="button" data-v="hex" aria-pressed="false">Hexagon 3D</button></div>
+    <div class="seg3" id="vseg" role="group" aria-label="Map style">
+      <button type="button" data-v="heat" aria-pressed="true">Heat map</button>
+      <button type="button" data-v="hex" aria-pressed="false">Hexagon 3D</button>
+      <button type="button" data-v="raised" aria-pressed="false">Raised hotspots</button>
+    </div>
     <label class="row"><span><input type="checkbox" id="lite"> Low-end mode (lighter graphics)</span></label>
   </fieldset>
   <fieldset><legend>Sensors</legend>
     <label><input type="checkbox" id="modis" checked> MODIS</label>
     <label><input type="checkbox" id="viirs" checked> VIIRS</label>
+    <label class="row"><span><input type="checkbox" id="normalize" checked> Normalize VIIRS to MODIS</span></label>
+    <p id="normstatus" class="hint" aria-live="polite"></p>
   </fieldset>
   <label class="row">Minimum confidence
     <select id="conf"><option value="0">Any</option><option value="1">Nominal and high</option><option value="2">High only</option></select>

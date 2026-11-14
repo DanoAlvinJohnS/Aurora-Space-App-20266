@@ -78,10 +78,11 @@ The player builds wildfire relief and prevention buildings and technology (optio
 ## Features
 
 ### Overview (first)
-- **Heat map** of burning activity: soft colored blobs, deeper/redder = burns more often.
+- **Land-attributed heat map** of burning activity: detections without a country assignment are excluded, keeping the heat focused on mapped land.
+- **Hexagon 3D** view: Globe.gl's H3 hexagonal prisms rise from the globe; their height and color show intensity.
+- **Raised hotspots** view: the original merged point markers, shown separately from the hexagon columns.
 - **Animated** grow-in when activity appears, and as the year changes.
 - Only three numbers are shown: **country mean, highest, lowest**. Highest and lowest are also labeled on the globe.
-- **Hexagon 3D** mode: 6-sided columns whose height and color show intensity.
 - Time slider with **Play** and a **Cumulative** toggle to watch history build up.
 
 ### Selected country (then specific)
@@ -89,13 +90,14 @@ Click a country and every other country fades to grey. A panel with three tabs o
 
 | Tab | Contents |
 |---|---|
-| **Statistics** | Total detections, peak year, busiest month, MODIS/VIIRS split, day/night split |
+| **Statistics** | Total detections, peak year, busiest month, MODIS/VIIRS split, day/night split; VIIRS values are marked as MODIS-equivalent when normalized |
 | **History** | Per-year chart (click a bar to jump to that year) and seasonality by month |
 | **Locations** | The 8 busiest ~100 km areas; click anywhere in the country to see that spot's yearly history |
 
 ### Options
 - Lighting: **Day / Night / Live** (real-time sun position from UTC)
 - Sensor toggles: MODIS, VIIRS
+- Optional VIIRS-to-MODIS overlap normalization using the shared 2012+ period
 - Minimum confidence: Any / Nominal and high / High only
 - Area size: Wide (~110 km) / Fine (~55 km)
 - Country search
@@ -108,25 +110,28 @@ FIRMS CSVs ──► preprocess.py ──► fire.bin + fire.json ──► brow
  (MODIS+VIIRS)   (run once)       (compact summary)        aggregates, animates, renders
 ```
 
-1. **Preprocess (once).** `preprocess.py` streams every FIRMS CSV in chunks (memory stays small at any total size) and bins detections into **0.5° cells** by `(year, sensor, confidence bucket, cell)`. Each cell is assigned to a country using the Natural Earth polygons, with a second pass to snap coastal cells to the nearest country. Per-country yearly, monthly, day/night and sensor totals are stored too.
+1. **Preprocess (once).** `preprocess.py` streams every FIRMS CSV in chunks and bins detections into **0.5° cells** by `(year, sensor, confidence bucket, cell)`. Each cell is assigned to a country using the Natural Earth polygons, with a second pass to snap coastal cells to the nearest country. Per-country yearly, monthly, day/night and sensor totals are stored too.
 2. **Harmonize.** Both sensors are put on one shared confidence scale:
    - MODIS numeric confidence (0–100): `< 30` low, `30–79` nominal, `≥ 80` high.
    - VIIRS letter ratings: `l` low, `n` nominal, `h` high.
    - Sensors are auto-detected from the column headers (`bright_ti4` means VIIRS).
+   - When both sensors have detections in 2012 or later, the optional overlap adjustment computes a global VIIRS weight for each confidence filter: MODIS detections in the shared period divided by VIIRS detections in that same period. The weight is applied to VIIRS counts in the map and country/location summaries.
 3. **Load.** The browser downloads `fire.bin` once and caches it (Cache API); later visits load instantly.
-4. **Aggregate.** One pass over the summary per setting, memoized, produces the grid shown as a heat map or hexagon columns.
-5. **Render.** The heat map is a single canvas texture over the globe; hexagons are one merged mesh.
+4. **Aggregate.** One pass over the summary per setting, memoized, produces the grid shown as a heat map, H3 hexagonal prisms, or raised hotspots. Cells without a Natural Earth country assignment are omitted from the map layers.
+5. **Render.** Globe.gl renders the heat map with a narrow Gaussian density kernel, hexagons with its H3 bin layer, and raised hotspots as merged point markers. Heat-map smoothing can still extend slightly past coastlines.
 
 ## Dataset
 
 **NASA FIRMS** (Fire Information for Resource Management System): archive active-fire detections.
 
-| Sensor | Satellites | Notes |
-|---|---|---|
-| **MODIS** | Terra, Aqua | Record starts in 2000; ~1 km pixels; confidence 0–100 |
-| **VIIRS** | Suomi NPP (and NOAA-20 / NOAA-21 if included) | Record starts in 2012; ~375 m pixels; confidence low / nominal / high |
+The current local input set contains **MODIS active-fire detections from Terra and Aqua**. The CSV `version` field contains `6.03`, `6.2`, and `61.03`; these are the values present in the input files, not a claim that the files belong to one standardized collection.
 
-> ⚠️ Fill in the exact products and date range you downloaded, e.g. `MODIS C6.1` and `VIIRS S-NPP 375 m`, years `2000–2025`.
+The 974 current CSV files contain **17,872,463 rows** with acquisition dates from **2000-11-01 through 2025-12-31**, but are not a continuous annual record: the included year folders are **2000, 2002, 2004, 2005, and 2025**. The current input set contains **no VIIRS files**, so overlap normalization is implemented but unavailable until VIIRS detections from the shared 2012+ period are added. The app disables the adjustment when it cannot calculate it.
+
+| Sensor in current input | Satellites | Coverage |
+|---|---|---|
+| **MODIS** | Terra, Aqua | 2000-11-01 to 2025-12-31; only 2000, 2002, 2004, 2005 and 2025 are included |
+| **VIIRS** | Not present in the current input set | Add overlapping 2012+ data to enable calibration |
 
 Columns used: `latitude`, `longitude`, `acq_date`, `confidence`, `daynight`.
 
@@ -144,15 +149,15 @@ Raw CSVs are **not** committed (too large). Download them from [FIRMS](https://f
 # 1. Put FIRMS MODIS and VIIRS CSVs in ./dataset (subfolders are fine)
 
 # 2. Build the compact summary (once; re-run when CSVs change)
-pip install numpy pandas shapely
-python3 preprocess.py 
+pip install numpy pandas "shapely>=2.0"
+python3 preprocess.py
 
 # 3. Serve the folder and open it
 python3 -m http.server
-# visit http://localhost:8000 | Temporarily
+# visit http://localhost:8000
 ```
 
-The page needs `dataset/fire.bin` and `dataset/fire.json`. If they are missing, the app should show a clear message explaining how to generate them.
+The page needs `dataset/fire.bin` and `dataset/fire.json`. If they are missing, first add the FIRMS CSVs and run the preprocessing command. `preprocess.py` searches recursively, so subfolders are supported. `make_manifest.py` is an optional helper that writes a list of CSV paths to `dataset/manifest.json`; preprocessing does not require that manifest.
 
 Optional: put higher-resolution `earth-day.jpg`, `earth-night.jpg` and `earth-topology.png` in `assets/`.
 
@@ -167,12 +172,12 @@ The repository includes a minimal working scaffold for the app and the expected 
 ├── about.html          # About page
 ├── app.js              # Globe, heat map, hexagons, panels, animation
 ├── style.css           # Glass UI styling
-├── preprocess.py       # CSV → fire.bin + fire.json
-├── download_firms.bat  # Fetch Datasets  
+├── preprocess.py       # FIRMS CSVs → fire.bin + fire.json
+├── make_manifest.py    # Optional CSV file-list helper
 ├── assets/
 │   └── countries.geojson
 └── dataset/
-    ├── README.txt
+    ├── INSTRUCTION.txt
     ├── (your FIRMS CSVs)
     ├── fire.bin        # generated
     └── fire.json       # generated
@@ -183,8 +188,8 @@ This layout keeps the generated data and source assets separate, while making th
 ## Performance and low-end devices
 
 - Heavy work happens **once** in preprocessing; the browser loads a compact binary summary.
-- Aggregations are **memoized** per setting; animation is throttled to ~30 fps.
-- **Low-end mode** (auto-on for ≤ 4 CPU cores or ≤ 4 GB RAM): lower pixel ratio, smaller heat texture, no autorotate, no animations, hexagons capped at the 3,000 strongest areas.
+- Aggregations are memoized per setting; the cache is bounded to limit memory use. Raised-hotspot grow-in uses a few updates instead of rebuilding the scene every frame.
+- Heat-map KDE is capped at **2,000 input points**. **Low-end mode** (auto-on for ≤ 4 CPU cores or ≤ 4 GB RAM) also caps hexagon and hotspot inputs at 2,000; standard mode allows up to 6,000.
 - Rendering pauses when the tab is hidden; respects `prefers-reduced-motion`.
 
 ## Limitations
@@ -192,8 +197,9 @@ This layout keeps the generated data and source assets separate, while making th
 Being honest about what the numbers mean:
 
 - **Counts are detections, not burned area.** One large fire can produce many detections.
-- **Sensors are harmonized in confidence, not in sensitivity.** VIIRS has finer resolution and typically records more detections than MODIS, so mixing them can raise apparent activity after 2012. Use the sensor toggles to compare like with like. Normalizing detection rates between sensors is future work.
-- Data is aggregated to **0.5° cells** (country attribution is approximate near borders and coasts).
+- **Sensor overlap normalization is a global count-rate adjustment, not physical equivalence.** It scales VIIRS counts by the ratio of MODIS to VIIRS detections in the shared 2012+ period (using the selected confidence threshold). It does not correct regional coverage, revisit rate, sensitivity, or VIIRS's finer resolution. Review the displayed factor and compare sensors separately where appropriate.
+- The current local dataset contains MODIS only, so the overlap adjustment is disabled until overlapping VIIRS data is added.
+- Data is aggregated to **0.5° cells**; cells without a country assignment are omitted from the map and its global counter. Country attribution is approximate near borders and coasts, and heat-map density smoothing can extend slightly over nearby water.
 - Country polygons are low resolution, so small islands and some borders may be missing or imprecise.
 - Historical only: **not** a real-time or forecasting tool.
 
@@ -202,10 +208,9 @@ Being honest about what the numbers mean:
 - [x] Interactive 3D globe with color-intensity hotspots
 - [x] Harmonized MODIS + VIIRS summary
 - [x] Historical progression (time slider, play, cumulative)
-- [x] Heat map and 3D hexagon views, country drill-down, per-location history
+- [x] Land-attributed heat map, H3 3D hexagon columns, raised hotspot markers, country drill-down, per-location history
 - [x] Animation and low-end optimization
-- [x] Automated Import CSV files using .bat
-- [ ] Sensor-overlap normalization (use the shared 2012+ period to calibrate)
+- [x] Sensor-overlap normalization using the shared 2012+ period (requires both sensors in the input data)
 - [ ] Anomaly highlighting ("unusual conditions" vs. a location's baseline)
 - [ ] Area-of-interest selection finer than country (draw a region)
 - [ ] Potential **fire-spread** view when a hotspot ignites

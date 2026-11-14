@@ -12,9 +12,10 @@ const TEX = {
 const STOPS = [[255,224,138],[255,138,26],[214,18,40],[122,0,25]];
 const ATMO = { day: '#7db4ff', night: '#4d5f9a', live: '#6c9cf5' };
 
-let ref = 1, timer = null, raf = 0, sel = -1;
+let ref = 1, timer = null, raf = 0, drawTimer = null, sel = -1;
 let lite = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 8) <= 4;   // low-end guess, user can toggle
-let tab = 'stats', loc = null, view = 'heat', gf = 0, prev = new Map(), cur = [], rk = [], anim = 0, heat = null;
+let tab = 'stats', loc = null, view = 'heat', gf = 0, prev = new Map(), cur = [], rk = [], anim = 0;
+const HEX_LIMIT = 6000, LOW_HEX_LIMIT = 2000, HEAT_LIMIT = 2000;
 let light = 'live', mat = null, T = null, sun = { lat: 0, lng: 0 };
 
 /* ---------- globe: one merged mesh for all columns, country polygons on top ---------- */
@@ -23,6 +24,14 @@ const globe = Globe()($('#globe'))
   .showAtmosphere(true).atmosphereAltitude(0.2).atmosphereColor(ATMO.live)
   .pointLat('lat').pointLng('lng').pointAltitude('alt').pointColor('col').pointRadius('r')
   .pointResolution(6).pointsMerge(true)
+  .heatmapsData([]).heatmapPointLat('lat').heatmapPointLng('lng').heatmapPointWeight('weight')
+  .heatmapBandwidth(1.5).heatmapColorSaturation(1.5).heatmapBaseAltitude(.006).heatmapTopAltitude(.008)
+  .heatmapsTransitionDuration(0)
+  .hexBinPointsData([]).hexBinPointLat('lat').hexBinPointLng('lng').hexBinPointWeight('weight')
+  .hexMargin(.08).hexAltitude(({ sumWeight }) => .003 + .12 * level(sumWeight))
+  .hexTopColor(({ sumWeight }) => color(sumWeight))
+  .hexSideColor(({ sumWeight }) => colorL(level(sumWeight) * .55))
+  .hexBinMerge(true).hexTransitionDuration(0)
   .labelLat('lat').labelLng('lng').labelText('text').labelColor('color').labelSize(.9).labelDotRadius(.35).labelAltitude(.012).labelResolution(2)
   .ringColor(() => t => `rgba(255,200,80,${1 - t})`).ringMaxRadius(2.5).ringPropagationSpeed(1.5).ringRepeatPeriod(1400)
   .onPointClick(p => p && locAt(p.lat, p.lng))
@@ -39,6 +48,7 @@ function level(w) {
   if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(scale) || scale <= 0) return 0;
   return Math.max(0, Math.min(1, Math.log1p(w) / scale));
 }
+const fmt = value => Math.round(value).toLocaleString();
 const color = w => colorL(level(w));
 function colorL(l) {
   const value = Number.isFinite(l) ? Math.max(0, Math.min(1, l)) : 0;
@@ -110,7 +120,6 @@ async function initEarth() {
     $('[data-mode="live"]').disabled = true;
     if (light === 'live') light = 'night';
   }
-  initHeat();
   setLighting(light);
 }
 
@@ -191,6 +200,7 @@ async function boot() {
   $('#meta').textContent = `${M.rows.toLocaleString()} detections, ${cached ? 'loaded from cache' : 'downloaded'} in ${((performance.now() - t0) / 1000).toFixed(1)} s`;
   $('#loading').hidden = true;
   ['#status', '#controls', '#timeline'].forEach(s => $(s).hidden = false);
+  configureOverlap();
   $('#lite').checked = lite; if (lite) $('#res').value = '2'; setView(view);
   detail(); draw();
 }
@@ -202,91 +212,153 @@ const gmap = res => GM[res] || (GM[res] = (() => {
   return a;
 })());
 
+function overlapCount(sensor, minimum) {
+  const counts = M.overlap && M.overlap.counts && M.overlap.counts[sensor];
+  return counts ? counts.slice(minimum).reduce((sum, n) => sum + n, 0) : 0;
+}
+function overlapAvailable() {
+  return overlapCount(0, 0) > 0 && overlapCount(1, 0) > 0;
+}
+function normalizationOn() {
+  return $('#normalize').checked && overlapAvailable();
+}
+function overlapScale(minimum = 0) {
+  if (!normalizationOn()) return 1;
+  const modis = overlapCount(0, minimum), viirs = overlapCount(1, minimum);
+  return modis && viirs ? modis / viirs : 1;
+}
+function updateOverlapStatus() {
+  const control = $('#normalize'), status = $('#normstatus');
+  if (!overlapAvailable()) {
+    control.checked = false;
+    control.disabled = true;
+    status.textContent = 'Unavailable: add both MODIS and VIIRS detections from 2012 or later.';
+    return;
+  }
+  control.disabled = false;
+  const minimum = +$('#conf').value, modis = overlapCount(0, minimum), viirs = overlapCount(1, minimum);
+  if (!modis || !viirs) {
+    status.textContent = 'No overlap at this confidence level; raw counts are used for this filter.';
+  } else if (control.checked) {
+    status.textContent = `VIIRS scaled by ${overlapScale(minimum).toFixed(3)} using ${modis.toLocaleString()} MODIS and ${viirs.toLocaleString()} VIIRS detections from 2012+.`;
+  } else {
+    status.textContent = 'Normalization is off; raw detection counts are shown.';
+  }
+}
+function configureOverlap() {
+  const control = $('#normalize');
+  control.checked = overlapAvailable();
+  updateOverlapStatus();
+}
+function countryMetrics(country) {
+  const scale = overlapScale(0);
+  const combine = (bySensor, fallback) => bySensor
+    ? bySensor[0].map((n, i) => n + (bySensor[1][i] || 0) * scale)
+    : fallback;
+  const years = combine(country.ys, country.y);
+  const months = combine(country.ms, country.m);
+  const dayNight = country.dns
+    ? [country.dns[0][0] + country.dns[1][0] * scale, country.dns[0][1] + country.dns[1][1] * scale]
+    : country.dn;
+  return {
+    years,
+    months,
+    dayNight,
+    total: years.reduce((sum, n) => sum + n, 0),
+    modis: country.s[0],
+    viirs: country.s[1] * scale,
+  };
+}
+
 function agg() {
   const res = sel >= 0 ? 1 : +$('#res').value, end = +$('#year').value - M.y0, cum = $('#cum').checked, mc = +$('#conf').value;
-  const s0 = $('#modis').checked, s1 = $('#viirs').checked, k = [res, sel, end, +cum, mc, +s0, +s1].join();
+  const s0 = $('#modis').checked, s1 = $('#viirs').checked, scale = overlapScale(mc);
+  const k = [res, sel, end, +cum, mc, +s0, +s1, scale].join();
   let r = memo.get(k); if (r) { ref = r.ref; return r; }
-  const map = gmap(res), W = M.nx / res, grid = new Float32Array(W * (M.ny / res)), cs = new Float64Array(countries.length);
+  const map = gmap(res), W = M.nx / res, grid = new Float32Array(W * (M.ny / res));
+  const cellCounts = new Float32Array(NC), cs = new Float64Array(countries.length);
   let total = 0;
   for (let i = 0; i < N; i++) {
     const y = YR[i]; if (y > end || (!cum && y !== end) || CB[i] < mc || !(SN[i] ? s1 : s0)) continue;
-    const c = CNT[i], cell = CELL[i], o = CC[cell];
-    if (o !== 255) cs[o] += c; if (sel >= 0 && o !== sel) continue; grid[map[cell]] += c; total += c;
+    const c = CNT[i] * (SN[i] ? scale : 1), cell = CELL[i], o = CC[cell];
+    if (o === 255) continue;
+    cs[o] += c;
+    if (sel >= 0 && o !== sel) continue;
+    total += c;
+    cellCounts[cell] += c;
+  }
+  const positionWeights = new Float32Array(grid.length), positionCells = new Uint32Array(grid.length);
+  for (let cell = 0; cell < NC; cell++) {
+    const count = cellCounts[cell]; if (!count) continue;
+    const g = map[cell]; grid[g] += count;
+    if (count > positionWeights[g]) { positionWeights[g] = count; positionCells[g] = cell; }
   }
   let mx = 1; for (let g = 0; g < grid.length; g++) if (grid[g] > mx) mx = grid[g];
   ref = mx; const pts = [];
   for (let g = 0; g < grid.length; g++) {
     const v = grid[g]; if (!v) continue;
-    const gy = (g / W) | 0, gx = g - gy * W;
-    pts.push({ lat: 90 - (gy + .5) * res / 2, lng: -180 + (gx + .5) * res / 2, v, i: g });
+    const cell = positionCells[g], iy = (cell / M.nx) | 0, ix = cell - iy * M.nx;
+    pts.push({ lat: 90 - (iy + .5) * 180 / M.ny, lng: -180 + (ix + .5) * 360 / M.nx, v, i: g });
   }
-  pts.sort((a, b) => a.v - b.v); r = { pts, total, cs, res, ref }; memo.set(k, r); if (memo.size > 40) memo.delete(memo.keys().next().value);
+  pts.sort((a, b) => a.v - b.v); r = { pts, total, cs, res, ref }; memo.set(k, r); if (memo.size > 20) memo.delete(memo.keys().next().value);
   return r;
 }
-
-const hc = document.createElement('canvas'), hx = hc.getContext('2d'), SP = [];
-hc.width = 1024; hc.height = 512;
-function initHeat() {
-  if (!T) return;
-  try {
-    const tx = new T.CanvasTexture(hc);
-    heat = new T.Mesh(new T.SphereGeometry(100.2, lite ? 48 : 72, lite ? 32 : 48), new T.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false }));
-    heat.rotation.y = -Math.PI / 2; heat.renderOrder = 2; heat.userData.tx = tx; globe.scene().add(heat);
-  } catch (e) { heat = null; }
-  if (!heat) { $('[data-v="heat"]').disabled = true; view = 'hex'; }
-}
-function sprite(k) {
-  if (SP[k]) return SP[k];
-  const c = document.createElement('canvas'); c.width = c.height = 48; const g = c.getContext('2d');
-  const col = colorL(k / 15).replace('rgb', 'rgba'), gr = g.createRadialGradient(24, 24, 0, 24, 24, 24);
-  gr.addColorStop(0, col.replace(')', ',.95)')); gr.addColorStop(.55, col.replace(')', ',.45)')); gr.addColorStop(1, col.replace(')', ',0)'));
-  g.fillStyle = gr; g.fillRect(0, 0, 48, 48); return SP[k] = c;
-}
-function paintHeat(e) {                       // soft colour blobs on one canvas texture, laid over the globe
-  if (!heat) return;
-  const W = lite ? 512 : 1024; if (hc.width !== W) { hc.width = W; hc.height = W / 2; }
-  hx.clearRect(0, 0, W, W / 2);
-  const d = W / 360 * (cur.res || 2) * 3, seen = new Set();
-  const put = (q, v) => {
-    const l = level(v); if (l < .01) return;
-    const s = d * (.55 + .45 * e);
-    hx.globalAlpha = Math.min(1, .3 + l);
-    hx.drawImage(sprite(Math.round(l * 15)), (q.lng + 180) / 360 * W - s / 2, (90 - q.lat) / 180 * W / 2 - s / 2, s, s);
-  };
-  for (const q of cur) { seen.add(q.i); const p = prev.get(q.i); put(q, (p ? p.v : 0) + (q.v - (p ? p.v : 0)) * e); }
-  if (e < 1) for (const [i, q] of prev) if (!seen.has(i)) put(q, q.v * (1 - e));
-  hx.globalAlpha = 1; heat.userData.tx.needsUpdate = true;
+function hexLimit() {
+  return lite ? LOW_HEX_LIMIT : HEX_LIMIT;
 }
 function apply(e) {
-  if (view === 'heat') return paintHeat(e);
-  const src = lite && cur.length > 3000 ? cur.slice(-3000) : cur;      // low-end: keep only the strongest areas
-  globe.pointsData(src.map(q => { const p = prev.get(q.i), l = level((p ? p.v : 0) + (q.v - (p ? p.v : 0)) * e); return { lat: q.lat, lng: q.lng, alt: .005 + .14 * l, col: colorL(l), r: cur.res * .22 }; }));
+  const limit = view === 'heat' ? HEAT_LIMIT : hexLimit();
+  const src = cur.length > limit ? cur.slice(-limit) : cur;
+  const points = src.map(q => {
+    const p = prev.get(q.i), weight = (p ? p.v : 0) + (q.v - (p ? p.v : 0)) * e;
+    return { lat: q.lat, lng: q.lng, weight, i: q.i };
+  });
+  if (view === 'heat') {
+    globe.pointsData([]).hexBinPointsData([]);
+    globe.heatmapsData(points.length ? [points] : []);
+    return;
+  }
+  globe.heatmapsData([]);
+  if (view === 'hex') {
+    globe.pointsData([]).hexBinResolution(cur.res === 2 ? 3 : 4).hexBinPointsData(points);
+    return;
+  }
+  globe.hexBinPointsData([]);
+  globe.pointsData(points.map(p => ({ lat: p.lat, lng: p.lng, alt: .005 + .14 * level(p.weight), col: colorL(level(p.weight)), r: cur.res * .22 })));
 }
-function run() {                              // ~0.9 s grow-in, throttled to 30 fps; none in low-end mode
+function run() {
   cancelAnimationFrame(anim);
-  if (lite) return apply(1);
-  const t0 = performance.now(); let last = 0;
-  const step = t => { const p = Math.min(1, (t - t0) / 900), e = 1 - (1 - p) ** 3; if (t - last > 33 || p === 1) { last = t; apply(e); } if (p < 1) anim = requestAnimationFrame(step); };
+  if (lite || view !== 'raised') return apply(1);
+  const t0 = performance.now(); let lastFrame = -1;
+  const step = t => {
+    const p = Math.min(1, (t - t0) / 450), frame = Math.min(4, Math.floor(p * 4));
+    if (frame > lastFrame || p === 1) { lastFrame = frame; apply(1 - (1 - p) ** 3); }
+    if (p < 1) anim = requestAnimationFrame(step);
+  };
   anim = requestAnimationFrame(step);
 }
 function setView(v) {
-  if (v === 'heat' && !heat) v = 'hex';
-  view = v; if (heat) heat.visible = v === 'heat';
+  view = v;
   document.querySelectorAll('#vseg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v));
-  if (v === 'heat') globe.pointsData([]);
+  if (v !== 'raised') globe.pointsData([]);
   prev = new Map(); run();
 }
 function draw() {
   const r = agg(), y = $('#year').value, y0 = M.years[0];
-  prev = new Map(cur.map(q => [q.i, q])); cur = r.pts; cur.res = r.res; run();
-  $('#count').textContent = r.total.toLocaleString();
+  prev = view === 'raised' && !lite ? new Map(cur.map(q => [q.i, q])) : new Map();
+  cur = r.pts; cur.res = r.res; run();
+  $('#count').textContent = fmt(r.total);
+  $('#countlabel').textContent = normalizationOn() ? 'MODIS-equivalent detections' : 'detections shown';
   $('#yl').textContent = $('#cum').checked && +y > y0 ? `${y0}-${y}` : y;
   rk = []; countries.forEach((c, i) => r.cs[i] > 0 && rk.push([i, r.cs[i]])); rk.sort((a, b) => b[1] - a[1]);
   const L = (e, t, col) => ({ lat: countries[e[0]].lat, lng: countries[e[0]].lng, text: t + countries[e[0]].name, color: col });
   globe.labelsData(sel < 0 && rk.length > 1 ? [L(rk[0], 'Highest: ', '#ffe08a'), L(rk[rk.length - 1], 'Lowest: ', '#9fd0ff')] : []);
   list(); detail();
 }
-const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
+const redraw = () => {
+  clearTimeout(drawTimer);
+  drawTimer = setTimeout(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); }, 60);
+};
 
 /* ---------- countries: everything but the selected one fades to grey ---------- */
 function paint() {
@@ -310,7 +382,7 @@ function clear() { sel = -1; loc = null; globe.ringsData([]); fadeTo(0); draw();
 function list() {
   const q = $('#csearch').value.trim().toLowerCase(), cs = agg().cs;
   const rows = countries.map((c, i) => [i, cs[i]]).filter(([i, n]) => n > 0 && countries[i].name.toLowerCase().includes(q)).sort((a, b) => b[1] - a[1]);
-  $('#clist').innerHTML = rows.map(([i, n]) => `<button class="ci${i === sel ? ' sel' : ''}" data-i="${i}"><span>${countries[i].name}</span><span class="hint">${n.toLocaleString()}</span></button>`).join('') || '<p class="hint">No countries with detections.</p>';
+  $('#clist').innerHTML = rows.map(([i, n]) => `<button class="ci${i === sel ? ' sel' : ''}" data-i="${i}"><span>${countries[i].name}</span><span class="hint">${fmt(n)}</span></button>`).join('') || '<p class="hint">No countries with detections.</p>';
 }
 
 /* ---------- panel: overview first, then Statistics / History / Locations ---------- */
@@ -320,35 +392,37 @@ const bars = (a, f, cls, attr) => { const m = Math.max(...a) || 1; return `<div 
 function tops() {                                  // busiest 1-degree areas of the selected country
   if (TOP.has(sel)) return TOP.get(sel);
   const m = new Map(), W = M.nx, H = W >> 1;
-  for (let i = 0; i < N; i++) { const cell = CELL[i]; if (CC[cell] !== sel) continue; const iy = (cell / W) | 0, k = (iy >> 1) * H + ((cell - iy * W) >> 1); m.set(k, (m.get(k) || 0) + CNT[i]); }
+  const scale = overlapScale(0);
+  for (let i = 0; i < N; i++) { const cell = CELL[i]; if (CC[cell] !== sel) continue; const iy = (cell / W) | 0, k = (iy >> 1) * H + ((cell - iy * W) >> 1); m.set(k, (m.get(k) || 0) + CNT[i] * (SN[i] ? scale : 1)); }
   const r = [...m].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => { const by = (k / H) | 0; return { lat: 90 - by - .5, lng: -180 + (k - by * H) + .5, n }; });
   TOP.set(sel, r); return r;
 }
 function locAt(lat, lng) {                         // yearly history of one specific spot
   const by = Math.floor(90 - lat), bx = Math.floor(lng + 180), W = M.nx, off = M.years[0] - M.y0, a = new Array(M.years[1] - M.years[0] + 1).fill(0);
-  for (let i = 0; i < N; i++) { const cell = CELL[i], iy = (cell / W) | 0; if ((iy >> 1) === by && ((cell - iy * W) >> 1) === bx) a[YR[i] - off] += CNT[i]; }
+  const scale = overlapScale(0);
+  for (let i = 0; i < N; i++) { const cell = CELL[i], iy = (cell / W) | 0; if ((iy >> 1) === by && ((cell - iy * W) >> 1) === bx) a[YR[i] - off] += CNT[i] * (SN[i] ? scale : 1); }
   loc = { lat: 90 - by - .5, lng: -180 + bx + .5, a }; tab = 'loc'; globe.ringsData([loc]); detail();
 }
 function overview() {
   if (!rk.length) return '<p class="hint">No detections for these filters.</p>';
   const mean = rk.reduce((a, r) => a + r[1], 0) / rk.length, hi = rk[0], lo = rk[rk.length - 1];
   const t = (l, e, v) => `<button class="tile" ${e ? `data-i="${e[0]}"` : ''}><span class="hint">${l}</span><b>${v}</b><span>${e ? countries[e[0]].name : 'per country'}</span></button>`;
-  return `<h3>Overview</h3><div class="tiles">${t('Mean', null, Math.round(mean).toLocaleString())}${t('Highest', hi, hi[1].toLocaleString())}${t('Lowest', lo, lo[1].toLocaleString())}</div><p class="hint">Click a country on the globe (or Highest / Lowest) to see its statistics, history and specific locations.</p>`;
+  return `<h3>Overview</h3><div class="tiles">${t('Mean', null, fmt(mean))}${t('Highest', hi, fmt(hi[1]))}${t('Lowest', lo, fmt(lo[1]))}</div><p class="hint">Click a country on the globe (or Highest / Lowest) to see its statistics, history and specific locations.</p>`;
 }
 function detail() {
   const box = $('#detail');
   if (sel < 0) { box.innerHTML = overview(); return; }
-  const c = countries[sel], y0 = M.years[0], tot = c.y.reduce((a, b) => a + b, 0);
+  const c = countries[sel], metrics = countryMetrics(c), y0 = M.years[0], tot = metrics.total;
   const back = '<button id="clr" class="btn ghost small inline">Back to overview</button>';
   if (!tot) { box.innerHTML = `<p class="name">${c.name}</p><p class="hint">No detections in this dataset.</p>${back}`; return; }
-  const top = Math.max(...c.y), mt = Math.max(...c.m), dn = c.dn[0] + c.dn[1], yaxis = `<div class="axis"><span>${y0}</span><span>${M.years[1]}</span></div>`;
+  const top = Math.max(...metrics.years), mt = Math.max(...metrics.months), dn = metrics.dayNight[0] + metrics.dayNight[1], yaxis = `<div class="axis"><span>${y0}</span><span>${M.years[1]}</span></div>`;
   let body;
-  if (tab === 'stats') body = `<div class="stats"><div><b>${tot.toLocaleString()}</b>detections</div><div><b>${y0 + c.y.indexOf(top)}</b>peak year</div><div><b>${MON[c.m.indexOf(mt)]}</b>busiest month</div></div>
-    ${row('Shown with current filters', `<b>${agg().cs[sel].toLocaleString()}</b>`)}${row('MODIS / VIIRS', `${c.s[0].toLocaleString()} / ${c.s[1].toLocaleString()}`)}
-    ${row('Seen by day / night', dn ? `${Math.round(c.dn[0] / dn * 100)}% / ${Math.round(c.dn[1] / dn * 100)}%` : 'N/A')}
-    <p class="hint">Totals cover all sensors and confidence levels.</p>`;
-  else if (tab === 'hist') body = `<h3>Per year (click a bar)</h3>${bars(c.y, i => y0 + i, '', 'data-y')}${yaxis}<h3>Seasonality</h3>${bars(c.m, i => MON[i], 'm')}<div class="axis months">${MON.map(m => `<span>${m[0]}</span>`).join('')}</div>`;
-  else body = `<h3>Hotspot areas (about 100 km)</h3>${tops().map(p => `<button class="ci" data-l="${p.lat},${p.lng}"><span>${p.lat.toFixed(1)}, ${p.lng.toFixed(1)}</span><span class="hint">${p.n.toLocaleString()}</span></button>`).join('') || '<p class="hint">None.</p>'}
+  if (tab === 'stats') body = `<div class="stats"><div><b>${fmt(tot)}</b>detections</div><div><b>${y0 + metrics.years.indexOf(top)}</b>peak year</div><div><b>${MON[metrics.months.indexOf(mt)]}</b>busiest month</div></div>
+    ${row('Shown with current filters', `<b>${fmt(agg().cs[sel])}</b>`)}    ${row(normalizationOn() ? 'MODIS / VIIRS-equivalent' : 'MODIS / VIIRS', `${fmt(metrics.modis)} / ${fmt(metrics.viirs)}`)}
+    ${row('Seen by day / night', dn ? `${Math.round(metrics.dayNight[0] / dn * 100)}% / ${Math.round(metrics.dayNight[1] / dn * 100)}%` : 'N/A')}
+    <p class="hint">Country totals and charts include all confidence levels${normalizationOn() ? '; VIIRS is overlap-scaled.' : '.'}</p>`;
+  else if (tab === 'hist') body = `<h3>Per year (click a bar)</h3>${bars(metrics.years, i => y0 + i, '', 'data-y')}${yaxis}<h3>Seasonality</h3>${bars(metrics.months, i => MON[i], 'm')}<div class="axis months">${MON.map(m => `<span>${m[0]}</span>`).join('')}</div>`;
+  else body = `<h3>Hotspot areas (about 100 km)</h3>${tops().map(p => `<button class="ci" data-l="${p.lat},${p.lng}"><span>${p.lat.toFixed(1)}, ${p.lng.toFixed(1)}</span><span class="hint">${fmt(p.n)}</span></button>`).join('') || '<p class="hint">None.</p>'}
     ${loc ? `<h3>Area ${loc.lat.toFixed(1)}, ${loc.lng.toFixed(1)} per year</h3>${bars(loc.a, i => y0 + i, '', '')}${yaxis}` : '<p class="hint">Or click anywhere inside the country to inspect that spot.</p>'}`;
   box.innerHTML = `<p class="name">${c.name}</p><div class="tabs">${TABS.map(([k, l]) => `<button data-t="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>${body}${back}`;
 }
@@ -358,6 +432,13 @@ $('#clist').onclick = e => { const b = e.target.closest('.ci'); if (b) pick(+b.d
 $('#csearch').addEventListener('input', list);
 addEventListener('keydown', e => { if (e.key === 'Escape' && sel >= 0) clear(); });
 ['#modis', '#viirs', '#conf', '#cum', '#year', '#res'].forEach(s => $(s).addEventListener('input', redraw));
+$('#conf').addEventListener('input', updateOverlapStatus);
+$('#normalize').addEventListener('change', () => {
+  TOP.clear();
+  updateOverlapStatus();
+  if (loc) locAt(loc.lat, loc.lng);
+  redraw();
+});
 $('#play').onclick = () => {
   if (timer) { clearInterval(timer); timer = null; $('#play').textContent = 'Play'; return; }
   $('#play').textContent = 'Pause';

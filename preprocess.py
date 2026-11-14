@@ -30,8 +30,9 @@ for pad in (0, .25):                   # second pass: snap coastal cells to the 
 print('countries assigned to cells')
 
 dense = np.zeros(NYR * 6 * NC, np.uint32)           # (year, sensor, confidence bucket, cell)
-cy = np.zeros((NCO, NYR), np.int64); cm = np.zeros((NCO, 12), np.int64)
-cd = np.zeros((NCO, 2), np.int64);   cs = np.zeros((NCO, 2), np.int64)
+cy = np.zeros((NCO, NYR, 2), np.int64); cm = np.zeros((NCO, 12, 2), np.int64)
+cd = np.zeros((NCO, 2, 2), np.int64);   cs = np.zeros((NCO, 2), np.int64)
+overlap_counts = np.zeros((2, 3), np.uint64)        # (sensor, confidence bucket), shared years only
 add = lambda a, co, ix: a.__iadd__(np.bincount(co * a.shape[1] + ix, minlength=a.size).reshape(a.shape))
 rows = 0
 
@@ -54,12 +55,16 @@ for f in sorted((root / 'dataset').rglob('*.csv')):
         else:
             cb = np.full(len(ch), 2)
         dn = (ch.daynight.str.strip().str.upper().str[:1] == 'N').to_numpy() if 'daynight' in ch else np.zeros(len(ch), bool)
+        shared = ok & (yr >= 2012 - Y0)
+        if shared.any():
+            overlap_counts[sen] += np.bincount(cb[shared].astype(np.int64), minlength=3).astype(np.uint64)
         la, lo, yr, mo, cb, dn = la[ok], lo[ok], yr[ok].astype(np.int64), mo[ok].astype(np.int64), cb[ok].astype(np.int64), dn[ok].astype(np.int64)
         cell = np.clip(((90 - la) * 2).astype(np.int64), 0, NY - 1) * NX + np.clip(((lo + 180) * 2).astype(np.int64), 0, NX - 1)
         u, n = np.unique(((yr * 2 + sen) * 3 + cb) * NC + cell, return_counts=True)
         dense[u] += n.astype(np.uint32)
         co = cc[cell].astype(np.int64); m = co != 255
-        add(cy, co[m], yr[m]); add(cm, co[m], mo[m]); add(cd, co[m], dn[m]); add(cs, co[m], np.full(m.sum(), sen))
+        add(cy[:, :, sen], co[m], yr[m]); add(cm[:, :, sen], co[m], mo[m])
+        add(cd[:, :, sen], co[m], dn[m]); add(cs, co[m], np.full(m.sum(), sen))
         rows += int(ok.sum()); print(f'  {rows:,} detections', end='\r', flush=True)
     print()
 
@@ -71,8 +76,25 @@ blob = nz.tobytes() + dense[nz].tobytes() + cc.tobytes()
 def pt(g):
     g = max(g.geoms, key=lambda p: p.area) if hasattr(g, 'geoms') else g
     return g.representative_point()
-cos = [dict(name=(f['properties'].get('NAME') or f['properties'].get('ADMIN')), lat=round(pt(g).y, 2), lng=round(pt(g).x, 2),
-            y=cy[i, ya:yb + 1].tolist(), m=cm[i].tolist(), dn=cd[i].tolist(), s=cs[i].tolist()) for i, (f, g) in enumerate(zip(feats, geoms))]
-json.dump(dict(stamp=int(time.time()), n=int(len(nz)), bytes=len(blob), nx=NX, ny=NY, y0=Y0, years=[Y0 + ya, Y0 + yb], rows=rows, countries=cos),
+cos = []
+for i, (f, g) in enumerate(zip(feats, geoms)):
+    y_by_sensor = cy[i, ya:yb + 1, :].T
+    m_by_sensor = cm[i, :, :].T
+    dn_by_sensor = cd[i, :, :].T
+    cos.append(dict(
+        name=(f['properties'].get('NAME') or f['properties'].get('ADMIN')),
+        lat=round(pt(g).y, 2), lng=round(pt(g).x, 2),
+        y=y_by_sensor.sum(axis=0).tolist(), m=m_by_sensor.sum(axis=0).tolist(),
+        dn=dn_by_sensor.sum(axis=0).tolist(), s=cs[i].tolist(),
+        ys=y_by_sensor.tolist(), ms=m_by_sensor.tolist(), dns=dn_by_sensor.tolist()))
+scales = []
+for minimum in range(3):
+    modis = int(overlap_counts[0, minimum:].sum())
+    viirs = int(overlap_counts[1, minimum:].sum())
+    scales.append(modis / viirs if modis and viirs else 1.0)
+overlap = dict(startYear=2012, counts=overlap_counts.tolist(), scales=scales,
+               available=bool(overlap_counts[0].sum() and overlap_counts[1].sum()))
+json.dump(dict(stamp=int(time.time()), n=int(len(nz)), bytes=len(blob), nx=NX, ny=NY, y0=Y0,
+               years=[Y0 + ya, Y0 + yb], rows=rows, countries=cos, overlap=overlap),
           open(root / 'dataset' / 'fire.json', 'w'))
 print(f'done: {rows:,} detections -> {len(nz):,} records, {len(blob) / 1e6:.1f} MB')
