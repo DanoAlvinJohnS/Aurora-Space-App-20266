@@ -148,16 +148,34 @@ Raw CSVs are **not** committed (too large). Download them from [FIRMS](https://f
 ```bash
 # 1. Put FIRMS MODIS and VIIRS CSVs in ./dataset (subfolders are fine)
 
-# 2. Build the compact summary (once; re-run when CSVs change)
-pip install numpy pandas "shapely>=2.0"
+# 2. Install the preprocessing requirements
+python3 -m pip install -r requirements.txt
+
+# 3. Build the compact summary (once; re-run when CSVs change)
 python3 preprocess.py
 
-# 3. Serve the folder and open it
+# 4. Serve the folder and open it
 python3 -m http.server
 # visit http://localhost:8000
 ```
 
+On Windows, if `python3` is not available, use `python` instead:
+
+```powershell
+python -m pip install -r requirements.txt
+python preprocess.py
+python -m http.server
+```
+
 The page needs `dataset/fire.bin` and `dataset/fire.json`. If they are missing, first add the FIRMS CSVs and run the preprocessing command. `preprocess.py` searches recursively, so subfolders are supported. `make_manifest.py` is an optional helper that writes a list of CSV paths to `dataset/manifest.json`; preprocessing does not require that manifest.
+
+`preprocess.py` creates or replaces both generated files; `dataset/fire.bin` is not a script that should be run separately. When the app is opened through the local server, the browser automatically loads `dataset/fire.json` and `dataset/fire.bin`. If those files already exist and the CSV data has not changed, skip preprocessing and serve the folder directly:
+
+```bash
+python3 -m http.server
+```
+
+Run `python3 preprocess.py` again whenever the FIRMS CSV files change. This refreshes `fire.bin` and `fire.json`, and the app loads the refreshed files after you reload the page.
 
 Optional: put higher-resolution `earth-day.jpg`, `earth-night.jpg` and `earth-topology.png` in `assets/`.
 
@@ -172,6 +190,7 @@ The repository includes a minimal working scaffold for the app and the expected 
 ├── about.html          # About page
 ├── app.js              # Globe, heat map, hexagons, panels, animation
 ├── style.css           # Glass UI styling
+├── requirements.txt    # Python packages for preprocessing
 ├── preprocess.py       # FIRMS CSVs → fire.bin + fire.json
 ├── make_manifest.py    # Optional CSV file-list helper
 ├── assets/

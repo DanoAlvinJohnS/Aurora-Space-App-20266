@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run once:  pip install numpy pandas shapely  &&  python3 preprocess.py
+"""Run once:  python3 -m pip install -r requirements.txt  &&  python3 preprocess.py
 Streams every FIRMS CSV under ./dataset in chunks (any total size, memory stays small) and writes
 dataset/fire.bin + dataset/fire.json: a compact summary the browser loads in seconds.
 Re-run whenever the CSV files change."""
