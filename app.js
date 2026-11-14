@@ -1,37 +1,28 @@
 const $ = s => document.querySelector(s);
 
 /* ---------- settings ---------- */
-const MAX = 250000;                                   // points kept in memory (thinned evenly beyond this)
-const CONF = { l: 15, n: 55, h: 90 };
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const CDN = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/';
 // Put your own higher-resolution maps in /assets (earth-day.jpg, earth-night.jpg, earth-topology.png)
-// and they are used first. Otherwise the CDN versions are used.
 const TEX = {
   day:   ['assets/earth-day.jpg', CDN + 'earth-day.jpg', CDN + 'earth-blue-marble.jpg'],
   night: ['assets/earth-night.jpg', CDN + 'earth-night.jpg'],
   topo:  ['assets/earth-topology.png', CDN + 'earth-topology.png'],
 };
 const STOPS = [[255,224,138],[255,138,26],[214,18,40],[122,0,25]];
-const RADIUS_KM = { 3: 63, 4: 24 };                   // approx radius of one column's area per hex resolution
-const SAT = { T: 'Terra', A: 'Aqua', N: 'Suomi NPP', '1': 'NOAA-20', '2': 'NOAA-21' };
 const ATMO = { day: '#7db4ff', night: '#4d5f9a', live: '#6c9cf5' };
 
-let all = [], step = 1, seen = 0, ref = 1, minY = 2000, maxY = 2025, timer = null;
+let ref = 1, timer = null, raf = 0, sel = -1;
 let light = 'live', mat = null, T = null, sun = { lat: 0, lng: 0 };
 
-/* ---------- globe ---------- */
+/* ---------- globe: one merged mesh for all columns, country polygons on top ---------- */
 const globe = Globe()($('#globe'))
   .backgroundImageUrl(CDN + 'night-sky.png')
   .showAtmosphere(true).atmosphereAltitude(0.2).atmosphereColor(ATMO.live)
-  .hexBinPointLat(d => d.lat).hexBinPointLng(d => d.lng)
-  .hexBinResolution(3).hexMargin(0.2)
-  .hexTopColor(h => color(h.sumWeight)).hexSideColor(h => color(h.sumWeight))
-  .hexAltitude(h => 0.005 + 0.14 * level(h.sumWeight))
-  .hexLabel(h => `<b>${h.sumWeight.toLocaleString()}</b> detections · click for history`)
-  .onHexClick(showInfo)
-  .ringColor(() => t => `rgba(255,214,150,${1 - t})`)
-  .ringMaxRadius(3.5).ringPropagationSpeed(1.6).ringRepeatPeriod(1400);
+  .pointLat('lat').pointLng('lng').pointAltitude('alt').pointColor('col').pointRadius('r')
+  .pointResolution(4).pointsMerge(true)
+  .polygonAltitude(0.004).polygonSideColor(() => 'rgba(0,0,0,0)').polygonsTransitionDuration(0)
+  .onPolygonClick(p => p && pick(p.__i));
 
 globe.controls().autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
 globe.controls().autoRotateSpeed = 0.4;
@@ -142,256 +133,147 @@ document.querySelectorAll('.seg button').forEach(b => b.onclick = () => setLight
 $('#sunbtn').onclick = () => { updateSun(); globe.controls().autoRotate = false; globe.pointOfView({ lat: sun.lat, lng: sun.lng, altitude: 2.2 }, 1200); };
 setInterval(() => { if (light === 'live') updateSun(); }, 15000);
 
-/* ---------- CSV reading (streamed, so very large files are fine) ---------- */
-function makeReader(name) {
-  const guess = /viirs/i.test(name) ? 'VIIRS' : /modis/i.test(name) ? 'MODIS' : null;
-  let ix = {}, viirsCols = false;
-  return {
-    header(line) {
-      const h = line.replace(/^\uFEFF/, '').split(',').map(s => s.trim().toLowerCase()), f = n => h.indexOf(n);
-      viirsCols = h.includes('bright_ti4');
-      ix = { la: f('latitude'), lo: f('longitude'), dt: f('acq_date'), tm: f('acq_time'), fr: f('frp'), ins: f('instrument'),
-        cf: f('confidence'), br: f('brightness') >= 0 ? f('brightness') : f('bright_ti4'), dn: f('daynight'), sat: f('satellite') };
-      if (ix.la < 0 || ix.lo < 0 || ix.dt < 0) throw new Error(`${name}: missing latitude, longitude or acq_date columns.`);
-    },
-    row(line) {
-      const r = line.split(','), lat = +r[ix.la], lng = +r[ix.lo], ds = (r[ix.dt] || '').trim();
-      const y = +ds.slice(0, 4), m = +ds.slice(5, 7), d = +ds.slice(8, 10);
-      if (isNaN(lat) || isNaN(lng) || isNaN(y) || isNaN(m)) return null;
-      const insRaw = (r[ix.ins] || '').trim().toUpperCase();
-      const ins = insRaw ? (insRaw === 'VIIRS' ? 'VIIRS' : 'MODIS') : (guess || (viirsCols ? 'VIIRS' : 'MODIS'));
-      const raw = (r[ix.cf] || '').trim().toLowerCase();
-      const c = raw === '' ? 100 : (isNaN(+raw) ? (CONF[raw[0]] ?? 100) : +raw);
-      const s = (r[ix.sat] || '').trim();
-      return { lat, lng, y, m, dt: y * 10000 + m * 100 + (d || 0), tm: +r[ix.tm] || 0, frp: +r[ix.fr] || 0,
-        br: +r[ix.br] || 0, ins, conf: c, dn: (r[ix.dn] || '').trim(), sat: SAT[s] || s };
-    },
-  };
-}
+/* ---------- prepared dataset (made once by preprocess.py, cached in the browser) ---------- */
+let M, N, NC, CELL, YR, SN, CB, CNT, CC, countries = [];
+const GM = {}, memo = new Map();
 
-async function streamFile(url, name, onBytes) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
-  const rd = makeReader(name), dec = new TextDecoder();
-  let buf = '', first = true;
-  const handle = line => {
-    if (!line) return;
-    if (first) { rd.header(line); first = false; return; }
-    if (++seen % step) return;                           // evenly thin once the dataset is huge
-    const p = rd.row(line); if (!p) return;
-    all.push(p);
-    if (all.length > MAX) { all = all.filter((_, i) => !(i & 1)); step *= 2; }
-  };
-  const reader = res.body.getReader(); let bytes = 0;
+async function getBin() {
+  const url = 'dataset/fire.bin?v=' + M.stamp;
+  try { const hit = await (await caches.open('fireglobe')).match(url); if (hit) return { buf: await hit.arrayBuffer(), cached: true }; } catch (e) { /* no cache here */ }
+  const res = await fetch(url); if (!res.ok) throw new Error('fire.bin');
+  const len = +res.headers.get('content-length') || M.bytes, rd = res.body.getReader(), parts = []; let got = 0;
   for (;;) {
-    const { done, value } = await reader.read(); if (done) break;
-    bytes += value.length; onBytes(bytes);
-    buf += dec.decode(value, { stream: true });
-    let a = 0, b;
-    while ((b = buf.indexOf('\n', a)) >= 0) { handle(buf.slice(a, b).replace(/\r$/, '')); a = b + 1; }
-    buf = buf.slice(a);
+    const { done, value } = await rd.read(); if (done) break;
+    parts.push(value); got += value.length;
+    $('#lbar').style.width = Math.min(100, got / len * 100) + '%';
+    $('#ldetail').textContent = `${(got / 1e6).toFixed(0)} of ${(len / 1e6).toFixed(0)} MB (first visit only)`;
   }
-  buf += dec.decode(); if (buf.trim()) handle(buf.replace(/\r$/, ''));
+  const buf = await new Blob(parts).arrayBuffer();
+  try { const c = await caches.open('fireglobe'); for (const k of await c.keys()) await c.delete(k); await c.put(url, new Response(buf)); } catch (e) { /* ignore */ }
+  return { buf, cached: false };
 }
-
-async function discover() {
-  try {                                                  // 1) optional dataset/manifest.json
-    const r = await fetch('dataset/manifest.json', { cache: 'no-store' });
-    if (r.ok && !/html/.test(r.headers.get('content-type') || '')) {
-      const j = await r.json(), list = Array.isArray(j) ? j : (j.files || []);
-      return list.map(f => new URL(encodeURI('dataset/' + String(f).replace(/^\/+/, '').replace(/^dataset\//, '')), location.href).href);
-    }
-  } catch (e) { /* no manifest */ }
-  const out = [];                                        // 2) read the server's folder listing
-  const walk = async (dirUrl, depth) => {
-    let r; try { r = await fetch(dirUrl, { cache: 'no-store' }); } catch (e) { return; }
-    if (!r.ok || !/html/.test(r.headers.get('content-type') || '')) return;
-    const doc = new DOMParser().parseFromString(await r.text(), 'text/html'), base = new URL(dirUrl, location.href);
-    for (const a of doc.querySelectorAll('a[href]')) {
-      let u; try { u = new URL(a.getAttribute('href'), base); } catch (e) { continue; }
-      if (u.origin !== base.origin || !u.pathname.startsWith(base.pathname) || u.pathname === base.pathname) continue;
-      if (u.pathname.endsWith('/')) { if (depth < 2) await walk(u.href, depth + 1); }
-      else if (/\.csv$/i.test(u.pathname)) out.push(u.href);
-    }
-  };
-  await walk('dataset/', 0);
-  return [...new Set(out)].sort();
-}
-
-/* ---------- app flow ---------- */
-const niceName = u => decodeURIComponent(u.split('/').pop());
 
 async function boot() {
   $('#loading').hidden = false;
-  const files = await discover();
-  if (!files.length) {
-    $('#loading').hidden = true; $('#drop').hidden = false;
-    $('#dropmsg').innerHTML = 'No CSV files were found in <b>/dataset</b>. Put your FIRMS files there and reload, or drop one here. (Open the site through a local server, for example <code>python3 -m http.server</code>, so the browser may read that folder.)';
-    return;
-  }
-  const errs = [];
-  for (let i = 0; i < files.length; i++) {
-    const name = niceName(files[i]);
-    $('#lmsg').textContent = `Reading file ${i + 1} of ${files.length}`;
-    $('#ldetail').textContent = name;
-    try {
-      await streamFile(files[i], name, b => {
-        $('#lbar').style.width = ((i + Math.min(0.99, b / 2e8)) / files.length * 100) + '%';
-        $('#ldetail').textContent = `${name} · ${(b / 1e6).toFixed(0)} MB · ${all.length.toLocaleString()} points kept`;
-      });
-    } catch (e) { errs.push(e.message); console.warn(e); }
-    $('#lbar').style.width = ((i + 1) / files.length * 100) + '%';
-  }
-  $('#loading').hidden = true;
-  if (!all.length) {
-    $('#drop').hidden = false; $('#err').textContent = errs[0] || 'No valid rows found in /dataset.'; return;
-  }
-  ready();
-  if (errs.length) console.warn('Some files were skipped:', errs);
-}
-
-function ready() {
-  minY = Infinity; maxY = -Infinity;
-  for (const p of all) { if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; }
-  const yr = $('#year'); yr.min = minY; yr.max = maxY; yr.value = maxY;
-  $('#drop').hidden = true;
-  ['#controls', '#timeline'].forEach(s => $(s).hidden = false);
-  $('#sample').hidden = step === 1;
-  $('#sample').textContent = `Large dataset: showing an even 1-in-${step} sample so the globe stays smooth.`;
-  draw();
-}
-
-async function loadUploads(files) {
-  $('#err').textContent = '';
+  const t0 = performance.now();
+  let cached = false;
   try {
-    for (const f of files) {
-      const rd = makeReader(f.name); let first = true;
-      for (const line of (await f.text()).split(/\r?\n/)) {
-        if (!line) continue;
-        if (first) { rd.header(line); first = false; continue; }
-        if (++seen % step) continue;
-        const p = rd.row(line); if (!p) continue;
-        all.push(p); if (all.length > MAX) { all = all.filter((_, i) => !(i & 1)); step *= 2; }
-      }
-    }
-  } catch (e) { $('#drop').hidden = false; $('#err').textContent = e.message; return; }
-  if (!all.length) { $('#drop').hidden = false; $('#err').textContent = 'No valid rows found in this file.'; return; }
-  $('#info').hidden = true; ready();
+    const mr = await fetch('dataset/fire.json', { cache: 'no-cache' });
+    if (!mr.ok) throw new Error('fire.json');
+    M = await mr.json(); N = M.n; NC = M.nx * M.ny; countries = M.countries;
+    const r = await getBin(); cached = r.cached;
+    const key = new Uint32Array(r.buf, 0, N);
+    CNT = new Uint32Array(r.buf, 4 * N, N); CC = new Uint8Array(r.buf, 8 * N, NC);
+    CELL = new Uint32Array(N); YR = new Uint8Array(N); SN = new Uint8Array(N); CB = new Uint8Array(N);
+    for (let i = 0; i < N; i++) { const k = key[i], l = (k / NC) | 0; CELL[i] = k - l * NC; YR[i] = (l / 6) | 0; SN[i] = ((l / 3) | 0) & 1; CB[i] = l % 3; }
+    let gj; try { gj = await (await fetch('assets/countries.geojson')).json(); }
+    catch (e) { gj = await (await fetch('https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')).json(); }
+    gj.features.forEach((f, i) => f.__i = i);
+    paint(); globe.polygonsData(gj.features);
+  } catch (e) {
+    console.warn(e);
+    $('#lmsg').innerHTML = 'Prepared data not found. Put your FIRMS CSVs in <b>/dataset</b>, run <code>python3 preprocess.py</code> once, then serve this folder (for example <code>python3 -m http.server</code>) and reload.';
+    $('.progress').hidden = true; return;
+  }
+  const yr = $('#year'); yr.min = M.years[0]; yr.max = M.years[1]; yr.value = M.years[1];
+  $('#meta').textContent = `${M.rows.toLocaleString()} detections, ${cached ? 'loaded from cache' : 'downloaded'} in ${((performance.now() - t0) / 1000).toFixed(1)} s`;
+  $('#loading').hidden = true;
+  ['#status', '#controls', '#timeline'].forEach(s => $(s).hidden = false);
+  detail(); draw();
 }
 
-function filtered() {
-  const end = +$('#year').value, cum = $('#cum').checked, mc = +$('#conf').value;
-  const on = { MODIS: $('#modis').checked, VIIRS: $('#viirs').checked };
-  return all.filter(p => on[p.ins] && p.conf >= mc && p.y <= end && (cum || p.y === end));
+/* ---------- aggregation: one pass over the summary, memoised per setting ---------- */
+const gmap = res => GM[res] || (GM[res] = (() => {
+  const W = M.nx / res, a = new Uint32Array(NC);
+  for (let c = 0; c < NC; c++) { const iy = (c / M.nx) | 0, ix = c - iy * M.nx; a[c] = ((iy / res) | 0) * W + ((ix / res) | 0); }
+  return a;
+})());
+
+function agg() {
+  const res = +$('#res').value, end = +$('#year').value - M.y0, cum = $('#cum').checked, mc = +$('#conf').value;
+  const s0 = $('#modis').checked, s1 = $('#viirs').checked, k = [res, end, +cum, mc, +s0, +s1].join();
+  let r = memo.get(k); if (r) return r;
+  const map = gmap(res), W = M.nx / res, grid = new Float32Array(W * (M.ny / res)), cs = new Float64Array(countries.length);
+  let total = 0;
+  for (let i = 0; i < N; i++) {
+    const y = YR[i]; if (y > end || (!cum && y !== end) || CB[i] < mc || !(SN[i] ? s1 : s0)) continue;
+    const c = CNT[i], cell = CELL[i], o = CC[cell];
+    grid[map[cell]] += c; total += c; if (o !== 255) cs[o] += c;
+  }
+  let mx = 1; for (let g = 0; g < grid.length; g++) if (grid[g] > mx) mx = grid[g];
+  ref = mx; const pts = [];
+  for (let g = 0; g < grid.length; g++) {
+    const v = grid[g]; if (!v) continue;
+    const gy = (g / W) | 0, gx = g - gy * W;
+    pts.push({ lat: 90 - (gy + .5) * res / 2, lng: -180 + (gx + .5) * res / 2, alt: 0.005 + 0.14 * level(v), col: color(v), r: res * 0.22 });
+  }
+  r = { pts, total, cs }; memo.set(k, r); if (memo.size > 40) memo.delete(memo.keys().next().value);
+  return r;
 }
 
 function draw() {
-  const d = filtered(), cells = new Map();
-  d.forEach(p => { const k = Math.floor(p.lat) + ',' + Math.floor(p.lng); cells.set(k, (cells.get(k) || 0) + 1); });
-  ref = Math.max(1, ...cells.values());
-  globe.hexBinResolution(+$('#res').value).hexBinPointsData(d);
-  $('#count').textContent = d.length.toLocaleString();
-  const y = $('#year').value;
-  $('#yl').textContent = $('#cum').checked && +y > minY ? `${minY}–${y}` : y;
+  const r = agg(), y = $('#year').value, y0 = M.years[0];
+  globe.pointsData(r.pts);
+  $('#count').textContent = r.total.toLocaleString();
+  $('#yl').textContent = $('#cum').checked && +y > y0 ? `${y0}–${y}` : y;
+  list(); if (sel >= 0) $('#now').textContent = r.cs[sel].toLocaleString();
+}
+const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
+
+/* ---------- countries ---------- */
+function paint() {
+  globe.polygonCapColor(p => p.__i === sel ? 'rgba(255,138,26,.4)' : 'rgba(0,0,0,0)')
+    .polygonStrokeColor(p => p.__i === sel ? '#ffb366' : 'rgba(255,255,255,.18)');
+}
+function pick(i) {
+  sel = i; globe.controls().autoRotate = false; paint();
+  globe.pointOfView({ lat: countries[i].lat, lng: countries[i].lng, altitude: 1.8 }, 1000);
+  detail(); draw();
+}
+function clear() { sel = -1; paint(); detail(); draw(); }
+
+function list() {
+  const q = $('#csearch').value.trim().toLowerCase(), cs = agg().cs;
+  const rows = countries.map((c, i) => [i, cs[i]]).filter(([i, n]) => n > 0 && countries[i].name.toLowerCase().includes(q)).sort((a, b) => b[1] - a[1]);
+  $('#clist').innerHTML = rows.map(([i, n]) => `<button class="ci${i === sel ? ' sel' : ''}" data-i="${i}"><span>${countries[i].name}</span><span class="hint">${n.toLocaleString()}</span></button>`).join('') || '<p class="hint">No countries with detections.</p>';
 }
 
-/* ---------- wildfire history for a clicked area ---------- */
-const pad = n => String(n).padStart(2, '0');
-const fmtDate = dt => `${dt % 100} ${MON[Math.floor(dt / 100) % 100 - 1]} ${Math.floor(dt / 10000)}`;
-const fmtTime = tm => `${pad(Math.floor(tm / 100))}:${pad(tm % 100)} UTC`;
-const fmtCoord = (v, a, b) => `${Math.abs(v).toFixed(2)}°${v >= 0 ? a : b}`;
-
-function showInfo(h) {
-  globe.controls().autoRotate = false;
-  const c = h.center || { lat: h.points[0].lat, lng: h.points[0].lng };
-  const mc = +$('#conf').value, on = { MODIS: $('#modis').checked, VIIRS: $('#viirs').checked };
-  const r = RADIUS_KM[$('#res').value] / 111.32, cosL = Math.cos(c.lat * Math.PI / 180);
-  const pts = [];
-  for (const p of all) {                                 // whole history, regardless of the year slider
-    if (!on[p.ins] || p.conf < mc) continue;
-    const dy = p.lat - c.lat; if (Math.abs(dy) > r) continue;
-    const dx = (((p.lng - c.lng + 540) % 360) - 180) * cosL;
-    if (dx * dx + dy * dy <= r * r) pts.push(p);
-  }
-  globe.ringsData([{ lat: c.lat, lng: c.lng }]);
-  globe.pointOfView({ lat: c.lat, lng: c.lng, altitude: 1.3 }, 1100);
-  if (!pts.length) { $('#infobody').innerHTML = '<h2>No detections</h2>'; $('#info').hidden = false; return; }
-
-  const byY = {}, byM = Array(12).fill(0), byD = new Map(), ins = { MODIS: 0, VIIRS: 0 }, dn = { D: 0, N: 0 };
-  let frpSum = 0, frpMax = -1, frpAt = null, brSum = 0, brN = 0, hi = 0, first = Infinity, last = 0;
-  for (const p of pts) {
-    byY[p.y] = (byY[p.y] || 0) + 1; byM[p.m - 1]++; ins[p.ins]++;
-    if (p.dn === 'D' || p.dn === 'N') dn[p.dn]++;
-    const e = byD.get(p.dt) || [0, 0]; e[0]++; if (p.frp > e[1]) e[1] = p.frp; byD.set(p.dt, e);
-    frpSum += p.frp; if (p.frp > frpMax) { frpMax = p.frp; frpAt = p; }
-    if (p.br) { brSum += p.br; brN++; }
-    if (p.conf >= 80) hi++;
-    if (p.dt < first) first = p.dt; if (p.dt > last) last = p.dt;
-  }
-  const years = []; for (let y = minY; y <= maxY; y++) years.push(byY[y] || 0);
-  const top = Math.max(...years, 1), peakY = minY + years.indexOf(top);
-  const mTop = Math.max(...byM, 1), peakM = byM.indexOf(mTop);
-  const season = byM.map((n, i) => [n, i]).sort((a, b) => b[0] - a[0]).slice(0, 3).filter(x => x[0] > 0).map(x => MON[x[1]]).join(', ');
-  const active = years.filter(n => n > 0).length;
-  const days = [...byD].sort((a, b) => b[1][0] - a[1][0] || b[1][1] - a[1][1]).slice(0, 5);
-  const strong = [...pts].sort((a, b) => b.frp - a.frp).slice(0, 4);
-  const recent = [...pts].sort((a, b) => b.dt - a.dt || b.tm - a.tm).slice(0, 6);
-  let trend = '';
-  if (maxY - minY >= 9) {
-    const rec = years.slice(-5).reduce((s, n) => s + n, 0), bef = years.slice(-10, -5).reduce((s, n) => s + n, 0);
-    if (bef > 0) { const pc = Math.round((rec - bef) / bef * 100); trend = `<p class="hint">Last 5 years: ${pc >= 0 ? '+' : ''}${pc}% detections compared with the 5 years before.</p>`; }
-  }
-  const dnTot = dn.D + dn.N, sampled = step > 1 ? `<p class="hint">Counts come from a 1-in-${step} sample of the dataset.</p>` : '';
-  const evt = (a, b, c2) => `<div class="evt"><span>${a}</span><span>${b}</span><span class="hint">${c2}</span></div>`;
-
-  $('#infobody').innerHTML = `
-    <h2>Fire history</h2>
-    <p class="hint">Area around ${fmtCoord(c.lat, 'N', 'S')}, ${fmtCoord(c.lng, 'E', 'W')} · all years, about ${RADIUS_KM[$('#res').value]} km radius</p>
-    <div class="stats">
-      <div><b>${pts.length.toLocaleString()}</b>detections</div>
-      <div><b>${peakY}</b>peak year</div>
-      <div><b>${MON[peakM]}</b>busiest month</div>
-    </div>
-    <p>First recorded ${fmtDate(first)}, latest ${fmtDate(last)}. Fire seen in <b>${active}</b> of ${years.length} years. Main fire season: <b>${season}</b>.</p>
-    ${trend}
-    <h3>Detections per year</h3>
-    <div class="bars">${years.map((n, i) => `<i class="${minY + i === peakY ? 'peak' : ''}" style="height:${Math.max(3, n / top * 100)}%" title="${minY + i}: ${n.toLocaleString()}"></i>`).join('')}</div>
-    <div class="axis"><span>${minY}</span><span>${maxY}</span></div>
+function detail() {
+  const box = $('#detail');
+  if (sel < 0) { box.innerHTML = '<h3>Country</h3><p class="hint">Click a country on the globe or in the list to highlight it and see its fire history here.</p>'; return; }
+  const c = countries[sel], y0 = M.years[0], tot = c.y.reduce((a, b) => a + b, 0);
+  if (!tot) { box.innerHTML = `<p class="name">${c.name}</p><p class="hint">No detections in this dataset.</p><button id="clr" class="btn ghost small inline">Clear</button>`; $('#clr').onclick = clear; return; }
+  const top = Math.max(...c.y), mt = Math.max(...c.m), dn = c.dn[0] + c.dn[1], vi = c.s[1] / tot;
+  const row = (a, b) => `<div class="evt"><span>${a}</span><span>${b}</span></div>`;
+  box.innerHTML = `
+    <p class="name">${c.name}</p>
+    <div class="stats"><div><b>${tot.toLocaleString()}</b>detections</div><div><b>${y0 + c.y.indexOf(top)}</b>peak year</div><div><b>${MON[c.m.indexOf(mt)]}</b>busiest month</div></div>
+    <h3>Per year</h3>
+    <div class="bars">${c.y.map((n, i) => `<i class="${n === top ? 'peak' : ''}" style="height:${Math.max(3, n / top * 100)}%" title="${y0 + i}: ${n.toLocaleString()}"></i>`).join('')}</div>
+    <div class="axis"><span>${y0}</span><span>${M.years[1]}</span></div>
     <h3>Seasonality</h3>
-    <div class="bars m">${byM.map((n, i) => `<i style="height:${Math.max(3, n / mTop * 100)}%" title="${MON[i]}: ${n.toLocaleString()}"></i>`).join('')}</div>
+    <div class="bars m">${c.m.map((n, i) => `<i style="height:${Math.max(3, n / mt * 100)}%" title="${MON[i]}: ${n.toLocaleString()}"></i>`).join('')}</div>
     <div class="axis months">${MON.map(m => `<span>${m[0]}</span>`).join('')}</div>
-    <h3>Biggest burning days</h3>
-    ${days.map(([dt, [n, f]]) => evt(fmtDate(dt), `${n.toLocaleString()} hits`, f ? `up to ${f.toFixed(0)} MW` : '')).join('')}
-    <h3>Most intense detections</h3>
-    ${strong.map(p => evt(fmtDate(p.dt), `${p.frp.toFixed(0)} MW`, `${p.ins}${p.sat ? ' · ' + p.sat : ''}`)).join('')}
-    <h3>Most recent detections</h3>
-    ${recent.map(p => evt(fmtDate(p.dt), p.tm ? fmtTime(p.tm) : '', `${p.ins} · ${p.conf}% conf`)).join('')}
     <h3>Details</h3>
-    <div class="evt"><span>Average power</span><span>${(frpSum / pts.length).toFixed(1)} MW</span></div>
-    <div class="evt"><span>Strongest</span><span>${frpMax.toFixed(0)} MW</span><span class="hint">${fmtDate(frpAt.dt)}</span></div>
-    ${brN ? `<div class="evt"><span>Average brightness</span><span>${(brSum / brN).toFixed(0)} K</span></div>` : ''}
-    <div class="evt"><span>High confidence</span><span>${Math.round(hi / pts.length * 100)}%</span></div>
-    <div class="evt"><span>MODIS / VIIRS</span><span>${ins.MODIS.toLocaleString()} / ${ins.VIIRS.toLocaleString()}</span></div>
-    ${dnTot ? `<div class="evt"><span>Seen by day / night</span><span>${Math.round(dn.D / dnTot * 100)}% / ${Math.round(dn.N / dnTot * 100)}%</span></div>` : ''}
-    ${sampled}`;
-  $('#info').hidden = false; $('#info').scrollTop = 0;
+    ${row('Shown with current filters', '<b id="now">…</b>')}
+    ${row('MODIS / VIIRS', `${c.s[0].toLocaleString()} / ${c.s[1].toLocaleString()}`)}
+    ${row('Seen by day / night', dn ? `${Math.round(c.dn[0] / dn * 100)}% / ${Math.round(c.dn[1] / dn * 100)}%` : '–')}
+    <p class="hint">Charts and details cover all sensors and confidence levels.</p>
+    <button id="clr" class="btn ghost small inline">Clear selection</button>`;
+  $('#clr').onclick = clear; $('#now').textContent = agg().cs[sel].toLocaleString();
 }
 
 /* ---------- wiring ---------- */
-$('#pick').onclick = $('#again').onclick = () => $('#file').click();
-$('#file').onchange = e => e.target.files.length && loadUploads([...e.target.files]);
-addEventListener('dragover', e => { e.preventDefault(); $('#drop').classList.add('over'); });
-addEventListener('dragleave', () => $('#drop').classList.remove('over'));
-addEventListener('drop', e => { e.preventDefault(); $('#drop').classList.remove('over'); if (e.dataTransfer.files.length) loadUploads([...e.dataTransfer.files]); });
-const closeInfo = () => { $('#info').hidden = true; globe.ringsData([]); };
-$('#close').onclick = closeInfo;
-addEventListener('keydown', e => { if (e.key === 'Escape') closeInfo(); });
-['#modis', '#viirs', '#conf', '#cum', '#year', '#res'].forEach(s => $(s).addEventListener('input', () => { draw(); }));
+$('#clist').onclick = e => { const b = e.target.closest('.ci'); if (b) pick(+b.dataset.i); };
+$('#csearch').addEventListener('input', list);
+addEventListener('keydown', e => { if (e.key === 'Escape' && sel >= 0) clear(); });
+['#modis', '#viirs', '#conf', '#cum', '#year', '#res'].forEach(s => $(s).addEventListener('input', redraw));
 $('#play').onclick = () => {
   if (timer) { clearInterval(timer); timer = null; $('#play').textContent = 'Play'; return; }
   $('#play').textContent = 'Pause';
-  timer = setInterval(() => { const y = $('#year'); y.value = +y.value >= maxY ? minY : +y.value + 1; draw(); }, 900);
+  timer = setInterval(() => { const y = $('#year'); y.value = +y.value >= +y.max ? y.min : +y.value + 1; redraw(); }, 900);
 };
 
 await initEarth();
 boot();
+    
