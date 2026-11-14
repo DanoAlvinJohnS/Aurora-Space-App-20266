@@ -1,3 +1,4 @@
+import { spring, materialize, reduced } from './motion.js';
 const $ = s => document.querySelector(s);
 
 /* ---------- settings ---------- */
@@ -10,7 +11,7 @@ const TEX = {
   topo:  ['assets/earth-topology.png', CDN + 'earth-topology.png'],
 };
 const STOPS = [[255,224,138],[255,138,26],[214,18,40],[122,0,25]];
-const ATMO = { day: '#a78bfa', night: '#6d28d9', live: '#8b5cf6' };
+const ATMO = { day: '#8db4ff', night: '#3b5bc4', live: '#4a7ff8' };
 
 let ref = 1, timer = null, raf = 0, drawTimer = null, sel = -1;
 let lite = (() => { try { return localStorage.getItem('fg-lite') !== '0'; } catch (e) { return true; } })();   // low-end mode is ON by default; the choice is remembered
@@ -42,6 +43,19 @@ globe.controls().autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').ma
 globe.controls().autoRotateSpeed = 0.4;
 const fit = () => { globe.renderer().setPixelRatio(lite ? 1 : Math.min(devicePixelRatio || 1, 1.5)); globe.width(innerWidth).height(innerHeight); };
 addEventListener('resize', fit); fit();
+
+/* ---------- spring camera: starts from where the globe is NOW, keeps its velocity if interrupted ---------- */
+let cam = null;
+function flyTo(t, instant) {
+  const p = globe.pointOfView();
+  const v0 = cam ? cam.velocity() : undefined;
+  if (cam) { cam.stop(); cam = null; }
+  if (instant || lite || reduced.v) { globe.pointOfView(t, 0); return; }
+  const dl = (((t.lng - p.lng + 540) % 360) + 360) % 360 - 180;            // shortest way round the planet
+  cam = spring([p.lat, p.lng, p.altitude], [t.lat, p.lng + dl, t.altitude], { response: .5, damping: 1, velocity: v0, eps: .01 },
+    ([lat, lng, altitude]) => globe.pointOfView({ lat, lng, altitude }, 0), () => { cam = null; });
+}
+['pointerdown', 'wheel', 'touchstart'].forEach(ev => $('#globe').addEventListener(ev, () => { if (cam) { cam.stop(); cam = null; } }, { capture: true, passive: true }));   // grabbing the globe always wins
 
 function level(w) {
   const scale = Math.log1p(ref);
@@ -158,7 +172,7 @@ function setLighting(m) {
   if (live) updateSun();
 }
 document.querySelectorAll('.seg button').forEach(b => b.onclick = () => setLighting(b.dataset.mode));
-$('#sunbtn').onclick = () => { updateSun(); globe.controls().autoRotate = false; globe.pointOfView({ lat: sun.lat, lng: sun.lng, altitude: 2.2 }, 1200); };
+$('#sunbtn').onclick = () => { updateSun(); globe.controls().autoRotate = false; flyTo({ lat: sun.lat, lng: sun.lng, altitude: 2.2 }); };
 setInterval(() => { if (light === 'live') updateSun(); }, 15000);
 
 /* ---------- prepared dataset (made once by preprocess.py, cached in the browser) ---------- */
@@ -199,7 +213,7 @@ async function boot() {
     catch (e) { gj = await (await fetch('https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')).json(); }
     gj.features.forEach((f, i) => f.__i = i);
     FEATS = gj.features;
-    globe.pathPointLat(p => p[1]).pathPointLng(p => p[0]).pathPointAlt(() => .015).pathColor(() => '#c084fc').pathStroke(1.6).pathTransitionDuration(0).pathsData([]);
+    globe.pathPointLat(p => p[1]).pathPointLng(p => p[0]).pathPointAlt(() => .015).pathColor(() => '#ffc757').pathStroke(1.6).pathTransitionDuration(0).pathsData([]);
     paint(); globe.polygonsData(gj.features);
   } catch (e) {
     console.warn(e);
@@ -211,6 +225,7 @@ async function boot() {
   $('#lmsg').textContent = 'Building the map …'; $('#lbar').style.width = '100%'; $('.progress').classList.add('ind');
   await nextPaint();                                   // let the skeleton paint before the heavy first draw
   ['#status', '#controls', '#timeline'].forEach(s => $(s).hidden = false);
+  materialize($('#status'), { dx: -18, dy: 0 }); setTimeout(() => materialize($('#controls'), { dx: 18, dy: 0 }), 70); setTimeout(() => materialize($('#timeline'), { dx: 0, dy: 18 }), 140);
   configureOverlap();
   $('#lite').checked = lite; if (lite) $('#res').value = '2'; setView(view, true);
   detail(); draw();
@@ -393,26 +408,26 @@ const redraw = () => {
 const nextPaint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
 const SKEL = '<div class="skel"><i class="sk c"></i><i class="sk"></i><i class="sk s"></i><i class="sk b"></i></div>';
 let busyN = 0;
-const CSS_UI = `.sk{display:block;height:14px;border-radius:10px;margin:10px 0;background:linear-gradient(90deg,rgba(255,255,255,.07) 25%,rgba(255,255,255,.2) 50%,rgba(255,255,255,.07) 75%);background-size:200% 100%;animation:shim 1.2s infinite linear}
+const CSS_UI = `.sk{display:block;height:14px;border-radius:10px;margin:10px 0;background:linear-gradient(90deg,rgba(255,255,255,.06) 25%,rgba(255,255,255,.16) 50%,rgba(255,255,255,.06) 75%);background-size:200% 100%;animation:shim 1.2s infinite linear}
 .sk.c{width:54px;height:54px;border-radius:50%}.sk.s{width:60%}.sk.b{height:70px;border-radius:16px}
 .skrow{display:flex;gap:10px;justify-content:center;margin:12px 0}.skrow .sk{width:46px;height:46px;border-radius:50%;margin:0}
 @keyframes shim{to{background-position:-200% 0}}
 .busy{position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
 .busy[hidden]{display:none}.busy.on{opacity:1}
-.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#a855f7;border-radius:50%;animation:rot .7s linear infinite}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#7aa2ff;border-radius:50%;animation:rot .7s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
 .progress.ind i{width:40%!important;animation:ind 1s ease-in-out infinite alternate}
 @keyframes ind{from{margin-left:0}to{margin-left:60%}}
-.here{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:10px;align-items:baseline;padding:6px 18px;border-radius:999px;color:#f5f0ff;font:inherit;font-size:13px;cursor:pointer}
-.here b{font-size:15px}.here span{color:#b4a7d6;font-size:12px}.here[hidden]{display:none}
+.here{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:10px;align-items:baseline;padding:6px 18px;border-radius:999px;color:#fff;font:inherit;font-size:13px;cursor:pointer}
+.here b{font-size:15px}.here span{color:#8e8e93;font-size:12px}.here[hidden]{display:none}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-corner{background:transparent}::-webkit-scrollbar-button{display:none}
-::-webkit-scrollbar-thumb{background:linear-gradient(#a855f7,#6d28d9);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
-::-webkit-scrollbar-thumb:hover{background:linear-gradient(#c084fc,#7c3aed);background-clip:padding-box}
-@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:rgba(168,85,247,.6) transparent}}
-input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:6px;background:rgba(255,255,255,.16);outline:none;cursor:pointer}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#c084fc,#7c3aed);border:2px solid rgba(255,255,255,.35);box-shadow:0 0 10px rgba(168,85,247,.7)}
-input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#c084fc,#7c3aed);border:2px solid rgba(255,255,255,.35)}
-input[type=range]::-moz-range-track{height:6px;border-radius:6px;background:rgba(255,255,255,.16)}`;
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.45);background-clip:padding-box}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent}}
+input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:5px;background:rgba(120,120,128,.4);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#fff;border:0;box-shadow:0 1px 5px rgba(0,0,0,.35),0 0 0 .5px rgba(0,0,0,.08)}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:0;box-shadow:0 1px 5px rgba(0,0,0,.35)}
+input[type=range]::-moz-range-track{height:5px;border-radius:5px;background:rgba(120,120,128,.4)}`;
 function ensureUI() {                                  // makes the loaders work even if index.html / style.css are older
   if (!document.getElementById('fg-css')) { const st = document.createElement('style'); st.id = 'fg-css'; st.textContent = CSS_UI; document.head.appendChild(st); }
   if (!$('#busy')) { const b = document.createElement('div'); b.id = 'busy'; b.className = 'glass busy'; b.hidden = true; b.innerHTML = '<i class="spin"></i><span id="busytxt"></span>'; document.body.appendChild(b); }
@@ -420,7 +435,7 @@ function ensureUI() {                                  // makes the loaders work
   const lt = $('#lite');
   if (lt && !$('#hop')) {
     let v = 50; try { v = +localStorage.getItem('fg-hop') || 50; } catch (e) { /* ignore */ }
-    lt.closest('label').insertAdjacentHTML('afterend', `<label class="row">Heat map opacity: <b id="hopv">${v}</b>%<input type="range" id="hop" min="10" max="100" value="${v}"></label>`);
+    lt.closest('label').insertAdjacentHTML('afterend', `<label class="row"><span>Heat map opacity: <b id="hopv">${v}</b>%</span><input type="range" id="hop" min="10" max="100" value="${v}"></label>`);
   }
   const ld = $('#loading'), h = ld && ld.querySelector('h1');
   if (h && !ld.querySelector('.skrow')) h.insertAdjacentHTML('afterend', '<div class="skrow"><i class="sk"></i><i class="sk"></i><i class="sk"></i><i class="sk"></i></div>');
@@ -535,7 +550,7 @@ function setSelPath() {                                // the selected country's
       const pts = [];
       for (const [lng, lat] of r) { const u = (lng + 180) / 360 * 2 * Math.PI, th = (90 - lat) * Math.PI / 180; pts.push(-101.7 * Math.cos(u) * Math.sin(th), 101.7 * Math.cos(th), 101.7 * Math.sin(u) * Math.sin(th)); }
       const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pts, 3));
-      g.add(new T.LineLoop(geo, new T.LineBasicMaterial({ color: 0xc084fc })));
+      g.add(new T.LineLoop(geo, new T.LineBasicMaterial({ color: 0xffc757 })));
     }
     g.rotation.y = -Math.PI / 2; g.traverse(o => { o.raycast = () => {}; o.renderOrder = 5; }); selLine = g; globe.scene().add(g);
   }
@@ -568,17 +583,17 @@ function paintHeat() {
 /* ---------- countries ---------- */
 function paint() {                                    // polygons only catch clicks when the overlay layers are available
   if (heat && lab) { globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(() => 'rgba(0,0,0,0)'); return; }
-  globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(p => p.__i === sel ? '#c084fc' : 'rgba(216,180,254,.35)');
+  globe.polygonCapColor(() => 'rgba(0,0,0,0)').polygonStrokeColor(p => p.__i === sel ? '#ffc757' : 'rgba(255,255,255,.35)');
 }
 function fadeTo(t) { gf = t; fadeNext = true; if (!(heat && lab)) paint(); }
 function pick(i) { busy('Loading ' + countries[i].name + ' …', () => pickNow(i)); }
 function clear() { busy('Back to overview …', clearNow); }
 function pickNow(i) {
   sel = i; tab = 'stats'; loc = null; globe.ringsData([]); globe.controls().autoRotate = false; fadeTo(1);
-  globe.pointOfView({ lat: countries[i].lat, lng: countries[i].lng, altitude: 1.8 }, lite ? 0 : 1000);
-  draw();
+  flyTo({ lat: countries[i].lat, lng: countries[i].lng, altitude: 1.8 });
+  draw(); materialize($('#detail'), { dx: -14, dy: 0 });
 }
-function clearNow() { sel = -1; loc = null; globe.ringsData([]); fadeTo(0); draw(); }
+function clearNow() { sel = -1; loc = null; globe.ringsData([]); fadeTo(0); draw(); materialize($('#detail'), { dx: 0, dy: 8 }); }
 
 function list() {
   const q = $('#csearch').value.trim().toLowerCase(), cs = agg().cs;
@@ -650,8 +665,8 @@ $('#detail').onclick = e => {
   const t = e.target.closest('[data-i],[data-t],[data-l],[data-y],#clr'); if (!t) return;
   if (t.id === 'clr') return clear();
   if (t.dataset.i) return pick(+t.dataset.i);
-  if (t.dataset.t) { tab = t.dataset.t; return detail(); }
-  if (t.dataset.l) { const [la, lo] = t.dataset.l.split(',').map(Number); globe.pointOfView({ lat: la, lng: lo, altitude: 1.1 }, lite ? 0 : 800); return locAt(la, lo); }
+  if (t.dataset.t) { const d = TABS.findIndex(([k]) => k === t.dataset.t) - TABS.findIndex(([k]) => k === tab); tab = t.dataset.t; detail(); return materialize($('#detail'), { dx: Math.sign(d) * 18, dy: 0, from: .99, response: .3 }); }
+  if (t.dataset.l) { const [la, lo] = t.dataset.l.split(',').map(Number); flyTo({ lat: la, lng: lo, altitude: 1.1 }); return locAt(la, lo); }
   if (t.dataset.y !== undefined) { $('#year').value = M.years[0] + +t.dataset.y; redraw(); }
 };
 document.querySelectorAll('#vseg button').forEach(b => b.onclick = () => setView(b.dataset.v));
