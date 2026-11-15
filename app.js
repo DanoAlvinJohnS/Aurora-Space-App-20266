@@ -12,9 +12,10 @@ const TEX = {
 };
 const STOPS = [[255,224,138],[255,138,26],[214,18,40],[122,0,25]];
 const ATMO = { day: '#8db4ff', night: '#3b5bc4', live: '#4a7ff8' };
+const MIN_CONFIDENCE = 2, GRID_RESOLUTION = 1;
 
-let ref = 1, timer = null, raf = 0, drawTimer = null, sel = -1, area = null, areaHidden = false, noClickUntil = 0;
-let lite = (() => { try { return localStorage.getItem('tf-lite') !== '0'; } catch (e) { return true; } })();   // low-end mode is ON by default; the choice is remembered
+let ref = 1, timer = null, raf = 0, drawTimer = null, sel = -1, area = null, areaHidden = false, noClickUntil = 0, overviewData = null;
+const lite = true;
 let tab = 'stats', loc = null, view = 'heat', gf = 0, prev = new Map(), cur = [], rk = [], anim = 0;
 const HEX_LIMIT = 6000, LOW_HEX_LIMIT = 2000, HEAT_LIMIT = 1200, LOW_HEAT_LIMIT = 450;
 let light = 'live', mat = null, T = null, sun = { lat: 0, lng: 0 };
@@ -229,13 +230,17 @@ async function boot() {
     $('#lmsg').innerHTML = 'Prepared data not found. Put your FIRMS CSVs in <b>/dataset</b>, run <code>python3 preprocess.py</code> once, then serve this folder (for example <code>python3 -m http.server</code>) and reload.';
     $('.progress').hidden = true; return;
   }
-  const yr = $('#year'); yr.min = M.years[0]; yr.max = M.years[1]; yr.value = M.years[1];
+  const yr = $('#year'), yrFrom = $('#year-from');
+  yr.min = yrFrom.min = M.years[0]; yr.max = yrFrom.max = M.years[1];
+  yrFrom.value = M.years[0]; yr.value = M.years[1];
+  updateYearRange();
   $('#lmsg').textContent = 'Building the map …'; $('#lbar').style.width = '100%'; $('.progress').classList.add('ind');
   await nextPaint();                                   // let the skeleton paint before the heavy first draw
   ['#controls', '#timeline'].forEach(s => $(s).hidden = false);
   materialize($('#controls'), { dx: -18, dy: 0 });
+  syncSidebarWidth();
   configureOverlap();
-  $('#lite').checked = lite; if (lite) $('#res').value = '2'; run(); paintHeat();
+  run(); paintHeat();
   detail(); draw();
   await nextPaint(); $('#loading').hidden = true; updateHere(true); updateNames();
   (window.requestIdleCallback || setTimeout)(() => loadAdmin1().then(() => updateHere(true)));   // region / province names for the location pill
@@ -273,11 +278,11 @@ function updateOverlapStatus() {
     return;
   }
   control.disabled = false;
-  const minimum = +$('#conf').value, modis = overlapCount(0, minimum), viirs = overlapCount(1, minimum);
+  const modis = overlapCount(0, MIN_CONFIDENCE), viirs = overlapCount(1, MIN_CONFIDENCE);
   if (!modis || !viirs) {
     status.textContent = 'No overlap at this confidence level; raw counts are used for this filter.';
   } else if (control.checked) {
-    status.textContent = `VIIRS scaled by ${overlapScale(minimum).toFixed(3)} using ${modis.toLocaleString()} MODIS and ${viirs.toLocaleString()} VIIRS detections from 2012+.`;
+    status.textContent = `VIIRS scaled by ${overlapScale(MIN_CONFIDENCE).toFixed(3)} using ${modis.toLocaleString()} MODIS and ${viirs.toLocaleString()} VIIRS detections from 2012+.`;
   } else {
     status.textContent = 'Normalization is off; raw detection counts are shown.';
   }
@@ -298,17 +303,23 @@ function countryMetrics(country) {
 }
 
 function agg() {
-  const res = sel >= 0 ? 1 : +$('#res').value, end = +$('#year').value - M.y0, cum = $('#cum').checked, mc = +$('#conf').value;
+  const cumulative = $('#cum').checked;
+  const res = GRID_RESOLUTION, start = (cumulative ? +$('#year-from').value : +$('#year').value) - M.y0, end = +$('#year').value - M.y0, mc = MIN_CONFIDENCE;
   const s0 = $('#modis').checked, s1 = $('#viirs').checked, scale = overlapScale(mc);
-  const k = [res, sel, end, +cum, mc, +s0, +s1, scale].join();
+  const k = [res, sel, start, end, +cumulative, mc, +s0, +s1, scale].join();
   let r = memo.get(k); if (r) { ref = r.ref; return r; }
   const map = gmap(res), W = M.nx / res, grid = new Float32Array(W * (M.ny / res));
-  const cellCounts = new Float32Array(NC), cs = new Float64Array(countries.length);
+  const cellCounts = new Float32Array(NC), cs = new Float64Array(countries.length), allCs = new Float64Array(countries.length);
+  const yearCounts = new Float64Array(M.years[1] - M.years[0] + 1);
   let total = 0;
   for (let i = 0; i < N; i++) {
-    const y = YR[i]; if (y > end || (!cum && y !== end) || CB[i] < mc || !(SN[i] ? s1 : s0)) continue;
+    const y = YR[i]; if (CB[i] < mc || !(SN[i] ? s1 : s0)) continue;
     const c = CNT[i] * (SN[i] ? scale : 1), cell = CELL[i], o = CC[cell];
     if (o === 255) continue;
+    allCs[o] += c;
+    const calendarYear = y + M.y0;
+    if (calendarYear >= M.years[0] && calendarYear <= M.years[1]) yearCounts[calendarYear - M.years[0]] += c;
+    if (y < start || y > end) continue;
     cs[o] += c;
     if (sel >= 0 && o !== sel) continue;
     total += c;
@@ -349,7 +360,7 @@ function agg() {
     pts.push({ lat: 90 - (iy + .5) * 180 / M.ny, lng: -180 + (ix + .5) * 360 / M.nx, v, hv: heatGrid[g], i: g });
   }
   pts.sort((a, b) => a.v - b.v);
-  r = { pts, total, cs, res, ref, heatFloor: nextHeatFloor, heatRef: nextHeatRef };
+  r = { pts, total, cs, allCs, yearCounts, res, ref, heatFloor: nextHeatFloor, heatRef: nextHeatRef };
   memo.set(k, r); if (memo.size > 20) memo.delete(memo.keys().next().value);
   return r;
 }
@@ -385,10 +396,11 @@ function apply() {
 }
 const run = apply;
 function draw() {
-  const r = agg(), y = $('#year').value, y0 = M.years[0];
+  const r = agg(), start = +$('#year-from').value, end = +$('#year').value;
+  overviewData = r;
   heatFloor = r.heatFloor; heatRef = r.heatRef;
   cur = r.pts; cur.res = r.res; run(); paintHeat();
-  $('#yl').textContent = $('#cum').checked && +y > y0 ? `${y0}-${y}` : y;
+  $('#yl').textContent = start === end ? `${start}` : `${start}-${end}`;
   rk = []; countries.forEach((c, i) => r.cs[i] > 0 && rk.push([i, r.cs[i]])); rk.sort((a, b) => b[1] - a[1]);
   const L = (e, t, col) => ({ lat: countries[e[0]].lat, lng: countries[e[0]].lng, text: t + countries[e[0]].name, color: col });
   globe.labelsData([]);
@@ -396,9 +408,21 @@ function draw() {
   detail();
 }
 const redraw = () => {
+  updateYearRange();
   clearTimeout(drawTimer);
   drawTimer = setTimeout(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); }, 60);
 };
+function updateYearRange() {
+  const from = $('#year-from'), to = $('#year'), range = $('#year-range');
+  if (!from || !to || !range || !from.max || +from.max === +from.min) return;
+  const cumulative = $('#cum').checked;
+  from.disabled = !cumulative;
+  $('#timeline').classList.toggle('is-single-year', !cumulative);
+  const span = +from.max - +from.min;
+  const start = cumulative ? +from.value : +to.value;
+  range.style.setProperty('--range-start', `${(start - +from.min) / span * 100}%`);
+  range.style.setProperty('--range-end', `${(+to.value - +to.min) / span * 100}%`);
+}
 
 /* ---------- loading feedback ---------- */
 const nextPaint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
@@ -426,10 +450,10 @@ function ensureUI() {                                  // makes the loaders work
   if (!document.getElementById('tf-css')) { const st = document.createElement('style'); st.id = 'tf-css'; st.textContent = CSS_UI; document.head.appendChild(st); }
   if (!$('#busy')) { const b = document.createElement('div'); b.id = 'busy'; b.className = 'glass busy'; b.hidden = true; b.innerHTML = '<i class="spin"></i><span id="busytxt"></span>'; document.body.appendChild(b); }
   if (!$('#here')) { const b = document.createElement('button'); b.id = 'here'; b.className = 'glass here'; b.hidden = true; b.title = 'Select this country'; document.body.appendChild(b); }
-  const lt = $('#lite');
-  if (lt && !$('#hop')) {
+  const mapSettings = $('#map-sec-b .acc-in');
+  if (mapSettings && !$('#hop')) {
     let v = 50; try { v = +localStorage.getItem('tf-hop') || 50; } catch (e) { /* ignore */ }
-    lt.closest('label').insertAdjacentHTML('afterend', `<label class="row"><span>Heat map opacity: <b id="hopv">${v}</b>%</span><input type="range" id="hop" min="10" max="100" value="${v}"></label>`);
+    mapSettings.insertAdjacentHTML('beforeend', `<label class="row"><span>Heat map opacity: <b id="hopv">${v}</b>%</span><input type="range" id="hop" min="10" max="100" value="${v}"></label>`);
   }
   const ld = $('#loading'), h = ld && ld.querySelector('h1');
   if (h && !ld.querySelector('.skrow')) h.insertAdjacentHTML('afterend', '<div class="skrow"><i class="sk"></i><i class="sk"></i><i class="sk"></i><i class="sk"></i></div>');
@@ -759,10 +783,20 @@ function locAt(lat, lng) {                             // click on the globe: na
   loc = { name: `${(90 - by - .5).toFixed(1)}, ${(-180 + bx + .5).toFixed(1)}`, lat: 90 - by - .5, lng: -180 + bx + .5, a }; tab = 'hist'; globe.ringsData([loc]); detail();
 }
 function overview() {
-  if (!rk.length) return '<p class="hint">No detections for these filters.</p>';
-  const mean = rk.reduce((a, r) => a + r[1], 0) / rk.length, hi = rk[0], lo = rk[rk.length - 1];
-  const t = (l, e, v) => `<button class="tile" ${e ? `data-i="${e[0]}"` : ''}><span class="hint">${l}</span><b>${v}</b><span>${e ? countries[e[0]].name : 'per country'}</span></button>`;
-  return `<div class="overview"><h3>Overview</h3><div class="tiles">${t('Mean', null, fmt(mean))}${t('Highest', hi, fmt(hi[1]))}${t('Lowest', lo, fmt(lo[1]))}</div></div>`;
+  if (!overviewData) return '<p class="hint">Loading overall statistics…</p>';
+  const ranked = Array.from(overviewData.allCs, (n, i) => [i, n]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  const total = overviewData.yearCounts.reduce((sum, n) => sum + n, 0);
+  if (!total) return '<p class="hint">No detections for these filters.</p>';
+  const mean = total / ranked.length, hi = ranked[0], lo = ranked[ranked.length - 1];
+  const t = (l, e, v) => `<button type="button" class="tile" ${e ? `data-i="${e[0]}"` : ''}><span class="hint">${l}</span><b>${v}</b></button>`;
+  const years = Array.from(overviewData.yearCounts);
+  const months = Array(12).fill(0), scale = overlapScale(0);
+  countries.forEach(country => {
+    if (country.ms) {
+      for (let i = 0; i < 12; i++) months[i] += country.ms[0][i] + (country.ms[1][i] || 0) * scale;
+    } else country.m.forEach((n, i) => { months[i] += n; });
+  });
+  return `<div class="overview"><div class="overview-total"><span class="hint">Overall detections</span><b>${fmt(total)}</b><span class="hint">${fmt(ranked.length)} countries</span></div><div class="overview-yearly"><h3>Hotspots detected per year</h3><div class="chart">${chart('bar', years, i => M.years[0] + i, 'data-y')}</div></div><h3>Country statistics</h3><div class="tiles">${t('Average', null, fmt(mean))}${t('Highest', hi, fmt(hi[1]))}${t('Lowest', lo, fmt(lo[1]))}</div><div class="overview-seasonality"><h3>World seasonality</h3><div class="chart">${chart('bar', months, i => MON[i])}</div></div></div>`;
 }
 const CTYPES = [['bar', 'Vertical bars'], ['hbar', 'Horizontal bars'], ['line', 'Line'], ['pie', 'Pie']];
 const CT = { year: 'bar', season: 'bar', loc: 'bar' };
@@ -834,8 +868,7 @@ function detail() {
   if (area) { box.innerHTML = areaView(); return; }
   if (sel < 0) { seen.clear(); box.innerHTML = overview(); return; }
   const c = countries[sel], metrics = countryMetrics(c), y0 = M.years[0], tot = metrics.total;
-  const back = '';
-  if (!tot) { box.innerHTML = `<p class="name">${c.name}</p><p class="hint">No detections in this dataset.</p>${back}`; return; }
+  if (!tot) { box.innerHTML = `<p class="name">${c.name}</p><p class="hint">No detections in this dataset.</p>`; return; }
   const top = Math.max(...metrics.years), mt = Math.max(...metrics.months);
   let body;
   const rs = regionsReady() ? regionStats(sel) : null, ranked = rs ? rs.ranked : [], nTop = Math.min(topN, ranked.length);
@@ -860,7 +893,7 @@ function detail() {
     <h3>${rs ? 'Busiest regions' : 'Hotspot areas (about 100 km)'}</h3>${list || '<p class="hint">None.</p>'}
     ${loc ? `${block('loc', `${loc.name} per year`, loc.a, i => y0 + i, '')}${lt}` : ''}`;
   }
-  box.innerHTML = `<p class="name">${c.name}</p><div class="tabs">${TABS.map(([k, l]) => `<button data-t="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>${body}${back}`;
+  box.innerHTML = `<p class="name">${c.name}</p><div class="tabs">${TABS.map(([k, l]) => `<button data-t="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>${body}`;
 }
 
 /* ---------- search by country: ranked list under the dashboard, filtered as you type ---------- */
@@ -868,8 +901,13 @@ const norm = t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase
 function renderList() {
   const box = $('#clist'), inp = $('#csearch'); if (!box || !inp || !countries.length) return;
   const q = norm(inp.value), top = box.scrollTop;
+  if (!q) {
+    box.innerHTML = '<p class="hint">Search for a country to see matches.</p>';
+    box.scrollTop = 0;
+    return;
+  }
   let items = rk.map(([i, n]) => [i, n]);
-  if (q) { const have = new Set(items.map(x => x[0])); countries.forEach((c, i) => { if (!have.has(i)) items.push([i, 0]); }); items = items.filter(([i]) => norm(countries[i].name).includes(q)); items.sort((a, b) => (norm(countries[a[0]].name).startsWith(q) ? 0 : 1) - (norm(countries[b[0]].name).startsWith(q) ? 0 : 1) || b[1] - a[1]); }
+  const have = new Set(items.map(x => x[0])); countries.forEach((c, i) => { if (!have.has(i)) items.push([i, 0]); }); items = items.filter(([i]) => norm(countries[i].name).includes(q)); items.sort((a, b) => (norm(countries[a[0]].name).startsWith(q) ? 0 : 1) - (norm(countries[b[0]].name).startsWith(q) ? 0 : 1) || b[1] - a[1]);
   box.innerHTML = items.length ? items.slice(0, 300).map(([i, n]) => `<button type="button" class="ci${i === sel ? ' sel' : ''}" role="listitem" data-i="${i}"><span>${countries[i].name}</span><span class="hint">${n ? fmt(n) : 'none'}</span></button>`).join('') : '<p class="hint">No country matches.</p>';
   box.scrollTop = top;
 }
@@ -882,7 +920,6 @@ $('#clr').addEventListener('click', () => clear());
 document.querySelectorAll('.acc-h').forEach(b => b.addEventListener('click', () => {
   const sec = b.closest('.acc'), open = !sec.classList.contains('open');
   sec.classList.toggle('open', open); b.setAttribute('aria-expanded', open);
-  if (open && sec.id === 'search' && smode === 'country') setTimeout(() => $('#csearch').focus({ preventScroll: true }), 60);
 }));
 $('#clist').addEventListener('click', e => { const b = e.target.closest('.ci'); if (b) pick(+b.dataset.i); });
 
@@ -946,6 +983,150 @@ function areaView() {
     <div class="stats"><div><b>${y0 + r.years.indexOf(top)}</b>peak year</div><div><b>${fmt(r.km2)}</b>km² analysed</div></div>
     ${temp}${block('loc', 'Per year', r.years, i => y0 + i, '')}`;
 }
+
+function reportData() {
+  if (!M) throw new Error('Report data is not ready yet.');
+  const years = Array.from({ length: M.years[1] - M.years[0] + 1 }, (_, i) => String(M.years[0] + i));
+  if (area) {
+    const r = analyseArea(area), peak = Math.max(...r.years);
+    return {
+      title: area.name,
+      summary: [
+        ['Overall detections', fmt(r.total)],
+        ['Average per year', fmt(r.total / (r.years.length || 1))],
+        ['Peak year', String(M.years[0] + r.years.indexOf(peak))],
+        ['Area analysed', `${fmt(r.km2)} km²`],
+      ],
+      series: [{ label: 'Hotspots detected per year', labels: years, values: Array.from(r.years) }],
+    };
+  }
+  if (sel >= 0) {
+    const c = countries[sel], metrics = countryMetrics(c), peak = Math.max(...metrics.years);
+    return {
+      title: c.name,
+      summary: [
+        ['Overall detections', fmt(metrics.total)],
+        ['Average per year', fmt(metrics.total / (metrics.years.filter(n => n > 0).length || 1))],
+        ['Peak year', String(M.years[0] + metrics.years.indexOf(peak))],
+        ['Busiest month', MON[metrics.months.indexOf(Math.max(...metrics.months))]],
+      ],
+      series: [
+        { label: 'Hotspots detected per year', labels: years, values: Array.from(metrics.years) },
+        { label: 'Monthly seasonality', labels: MON, values: Array.from(metrics.months) },
+      ],
+    };
+  }
+  if (!overviewData) throw new Error('Overview report data is not ready yet.');
+  const ranked = Array.from(overviewData.allCs, (n, i) => [i, n]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  const total = overviewData.yearCounts.reduce((sum, n) => sum + n, 0);
+  const months = Array(12).fill(0), scale = overlapScale(0);
+  countries.forEach(country => {
+    if (country.ms) {
+      for (let i = 0; i < 12; i++) months[i] += country.ms[0][i] + (country.ms[1][i] || 0) * scale;
+    } else country.m.forEach((n, i) => { months[i] += n; });
+  });
+  const high = ranked[0], low = ranked[ranked.length - 1];
+  return {
+    title: 'Global overview',
+    summary: [
+      ['Overall detections', fmt(total)],
+      ['Countries with detections', fmt(ranked.length)],
+      ['Average per country', fmt(ranked.length ? total / ranked.length : 0)],
+      ['Highest / lowest', high ? `${countries[high[0]].name} / ${countries[low[0]].name}` : 'No detections'],
+    ],
+    series: [
+      { label: 'Hotspots detected per year', labels: years, values: Array.from(overviewData.yearCounts) },
+      { label: 'Worldwide monthly seasonality', labels: MON, values: months },
+    ],
+  };
+}
+function reportRows(report) {
+  const rows = [['section', 'metric', 'period', 'value']];
+  rows.push(['metadata', 'report', '', report.title], ['metadata', 'generated_at_utc', '', new Date().toISOString()]);
+  report.summary.forEach(([label, value]) => rows.push(['summary', label, '', value]));
+  report.series.forEach(series => series.values.forEach((value, i) => rows.push(['series', series.label, series.labels[i], value])));
+  return rows;
+}
+function csvCell(value) {
+  let text = String(value == null ? '' : value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+function reportFilename(title, extension) {
+  const name = title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+  return `${name || 'teraflare-report'}.${extension}`;
+}
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob), link = document.createElement('a');
+  link.href = url; link.download = filename; link.hidden = true; document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function drawReportChart(ctx, series, x, y, width, height) {
+  ctx.fillStyle = '#f0efeb'; ctx.font = '600 23px Figtree, sans-serif'; ctx.fillText(series.label, x, y);
+  const top = y + 24, bottom = top + height - 58, left = x + 52, right = x + width - 12;
+  const values = series.values, max = Math.max(1, ...values), slot = (right - left) / Math.max(1, values.length), barWidth = Math.max(3, slot * .64);
+  ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 2; i++) {
+    const gy = top + (bottom - top) * i / 2;
+    ctx.beginPath(); ctx.moveTo(left, gy); ctx.lineTo(right, gy); ctx.stroke();
+    ctx.fillStyle = '#aeb4c2'; ctx.font = '13px Figtree, sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(max * (1 - i / 2)).toLocaleString(), left - 8, gy + 4);
+  }
+  values.forEach((value, i) => {
+    const barHeight = Math.max(0, (bottom - top) * value / max), bx = left + slot * i + (slot - barWidth) / 2;
+    ctx.fillStyle = '#7aa2ff'; ctx.fillRect(bx, bottom - barHeight, barWidth, barHeight);
+    const labelEvery = Math.max(1, Math.ceil(values.length / 12));
+    if (i % labelEvery === 0 || i === values.length - 1) {
+      ctx.fillStyle = '#c6cad3'; ctx.font = '12px Figtree, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(series.labels[i], left + slot * (i + .5), bottom + 22);
+    }
+  });
+  ctx.textAlign = 'left';
+}
+function reportImage(report) {
+  const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not prepare an image in this browser.');
+  canvas.width = 1400; canvas.height = report.series.length > 1 ? 980 : 720;
+  const bg = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  bg.addColorStop(0, '#111827'); bg.addColorStop(1, '#202020'); ctx.fillStyle = bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#7aa2ff'; ctx.font = '700 17px Figtree, sans-serif'; ctx.fillText('TERAFLARE  ·  REPORT', 64, 58);
+  ctx.fillStyle = '#ffffff'; ctx.font = '700 38px Figtree, sans-serif'; ctx.fillText(report.title, 64, 112);
+  ctx.fillStyle = '#aeb4c2'; ctx.font = '15px Figtree, sans-serif'; ctx.fillText(`Generated ${new Date().toLocaleString()}`, 64, 145);
+  const cardY = 178, cardGap = 16, cardW = (canvas.width - 128 - cardGap * (report.summary.length - 1)) / report.summary.length;
+  report.summary.forEach(([label, value], i) => {
+    const x = 64 + i * (cardW + cardGap);
+    ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(x, cardY, cardW, 92);
+    ctx.fillStyle = '#aeb4c2'; ctx.font = '14px Figtree, sans-serif'; ctx.fillText(label, x + 18, cardY + 28);
+    ctx.fillStyle = '#ffffff'; ctx.font = '600 21px Figtree, sans-serif';
+    const text = String(value), maxWidth = cardW - 36;
+    ctx.fillText(text, x + 18, cardY + 65, maxWidth);
+  });
+  const chartY = 318, chartH = report.series.length > 1 ? 270 : 330;
+  report.series.forEach((series, i) => drawReportChart(ctx, series, 64, chartY + i * 320, canvas.width - 128, chartH));
+  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('The report image could not be created.')), 'image/png'));
+}
+async function exportReport(format) {
+  const status = $('#export-status');
+  status.classList.remove('err');
+  try {
+    const report = reportData();
+    if (format === 'csv') {
+      const csv = '\ufeff' + reportRows(report).map(row => row.map(csvCell).join(',')).join('\r\n');
+      downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), reportFilename(report.title, 'csv'));
+    } else {
+      const blob = await reportImage(report);
+      downloadBlob(blob, reportFilename(report.title, 'png'));
+    }
+    status.textContent = `${format.toUpperCase()} report downloaded for ${report.title}.`;
+  } catch (error) {
+    console.error('Report export failed:', error);
+    status.textContent = `Export failed: ${error.message}`;
+    status.classList.add('err');
+  }
+}
+$('#export-csv').addEventListener('click', () => exportReport('csv'));
+$('#export-image').addEventListener('click', () => exportReport('image'));
+
 function restorePaths() {
   const f = FEATS[sel];
   globe.pathsData(sel >= 0 && f ? (f.geometry.type === 'Polygon' ? f.geometry.coordinates : f.geometry.coordinates.flat(1)) : area && !areaHidden ? area.paths : []);
@@ -1056,14 +1237,18 @@ $('#smode').addEventListener('click', e => {
 /* ---------- sidebar (layout from 2nd.rar) ---------- */
 function activateSidebarTab(name) {
   const dashboard = name === 'dashboard';
+  const settings = name === 'view-settings';
+  const exporting = name === 'export';
   $('#dashboard-tab').setAttribute('aria-selected', dashboard);
-  $('#explore-tab').setAttribute('aria-selected', !dashboard);
+  $('#view-settings-tab').setAttribute('aria-selected', settings);
+  $('#export-tab').setAttribute('aria-selected', exporting);
   $('#dashboard-panel').hidden = !dashboard;
-  $('#explore-panel').hidden = dashboard;
-  $('#side-title').textContent = dashboard ? 'Dashboard' : 'Explore';
+  $('#view-settings-panel').hidden = !settings;
+  $('#export-panel').hidden = !exporting;
+  $('#side-title').textContent = dashboard ? 'Dashboard' : settings ? 'View settings' : 'Export';
 }
 document.querySelectorAll('.sidebar-tabs [role="tab"]').forEach(button => {
-  button.onclick = () => activateSidebarTab(button.id === 'dashboard-tab' ? 'dashboard' : 'explore');
+  button.onclick = () => activateSidebarTab(button.id.replace('-tab', ''));
 });
 let expandedSidebarWidth = '';
 $('#collapse').onclick = () => {
@@ -1094,8 +1279,29 @@ resizeHandle.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); resizeSidebar($('#controls').getBoundingClientRect().width + (e.key === 'ArrowRight' ? 16 : -16)); }
 });
 addEventListener('keydown', e => { if (e.key === 'Escape' && sel >= 0 && tx.view === 'globe' && !tx.busy) clear(); });
-['#modis', '#viirs', '#conf', '#cum', '#year', '#res'].forEach(s => $(s).addEventListener('input', redraw));
-$('#conf').addEventListener('input', updateOverlapStatus);
+['#modis', '#viirs'].forEach(s => $(s).addEventListener('input', redraw));
+$('#year-from').addEventListener('input', () => {
+  if (+$('#year-from').value > +$('#year').value) $('#year').value = $('#year-from').value;
+  redraw();
+});
+$('#year').addEventListener('input', () => {
+  if ($('#cum').checked && +$('#year').value < +$('#year-from').value) $('#year-from').value = $('#year').value;
+  if (!$('#cum').checked) $('#year-from').value = $('#year').value;
+  redraw();
+});
+$('#cum').addEventListener('change', () => {
+  $('#year-from').value = $('#cum').checked ? $('#year-from').min : $('#year').value;
+  redraw();
+});
+$('#year-range').addEventListener('pointerdown', e => {
+  if (e.target !== e.currentTarget) return;
+  const from = $('#year-from'), to = $('#year'), bounds = e.currentTarget.getBoundingClientRect();
+  const year = Math.round(+from.min + Math.max(0, Math.min(1, (e.clientX - bounds.left) / bounds.width)) * (+from.max - +from.min));
+  if (!$('#cum').checked) from.value = to.value = year;
+  else if (Math.abs(year - +from.value) <= Math.abs(year - +to.value)) from.value = Math.min(year, +to.value);
+  else to.value = Math.max(year, +from.value);
+  redraw();
+});
 $('#normalize').addEventListener('change', () => {
   TOP.clear(); RS.clear(); oKey = '';
   updateOverlapStatus();
@@ -1105,38 +1311,50 @@ $('#normalize').addEventListener('change', () => {
 $('#play').onclick = () => {
   if (timer) { clearInterval(timer); timer = null; $('#play').textContent = 'Play'; return; }
   $('#play').textContent = 'Pause';
-  timer = setInterval(() => { const y = $('#year'); y.value = +y.value >= +y.max ? y.min : +y.value + 1; redraw(); }, 900);
+  timer = setInterval(() => {
+    const from = $('#year-from'), to = $('#year'), span = +to.value - +from.value;
+    if (!$('#cum').checked) {
+      to.value = +to.value >= +to.max ? to.min : +to.value + 1;
+      from.value = to.value;
+    } else if (+from.value === +from.min) to.value = +to.value >= +to.max ? to.min : +to.value + 1;
+    else if (+to.value >= +to.max) { from.value = from.min; to.value = Math.min(+to.max, +from.min + span); }
+    else { from.value = +from.value + 1; to.value = +to.value + 1; }
+    redraw();
+  }, 900);
 };
 
 $('#detail').onclick = e => {
-  const t = e.target.closest('[data-i],[data-t],[data-l],[data-y],[data-r],[data-v],[data-n],#clr'); if (!t) return;
-  if (t.id === 'clr') return clear();
+  const t = e.target.closest('[data-i],[data-t],[data-l],[data-y],[data-r],[data-v],[data-n]'); if (!t) return;
   if (t.dataset.i) return pick(+t.dataset.i);
   if (t.dataset.t) { const d = TABS.findIndex(([k]) => k === t.dataset.t) - TABS.findIndex(([k]) => k === tab); tab = t.dataset.t; seen.clear(); detail(); return materialize($('#detail'), { dx: Math.sign(d) * 18, dy: 0, from: .99, response: .3 }); }
   if (t.dataset.v) { histView = t.dataset.v; seen.clear(); return detail(); }
   if (t.dataset.n) { topN = +t.dataset.n; return detail(); }
   if (t.dataset.r !== undefined) { const k = +t.dataset.r, r = regionStats(sel).regs[k]; flyTo({ lat: r.lat, lng: r.lng, altitude: 1.1 }); return locRegion(k); }
   if (t.dataset.l) { const [la, lo] = t.dataset.l.split(',').map(Number); flyTo({ lat: la, lng: lo, altitude: 1.1 }); return locAt(la, lo); }
-  if (t.dataset.y !== undefined) { $('#year').value = M.years[0] + +t.dataset.y; redraw(); }
+  if (t.dataset.y !== undefined) { const year = M.years[0] + +t.dataset.y; $('#year-from').value = $('#year').value = year; redraw(); }
 };
 $('#detail').addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.ct; if (k) { CT[k] = e.target.value; detail(); } });
-$('#hexpct').addEventListener('click', e => {
-  const b = e.target.closest('button[data-p]'); if (!b) return;
-  hexPct = +b.dataset.p / 100; $('#hexpct').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); run();
+$('#hexpct').addEventListener('change', e => {
+  hexPct = +e.target.value / 100;
+  run();
 });
 document.addEventListener('input', e => {
   if (e.target.id !== 'hop') return;
   const v = e.target.value; $('#hopv').textContent = v; try { localStorage.setItem('tf-hop', v); } catch (x) { /* ignore */ }
   if (heat) heat.material.opacity = v / 100;
 });
-$('#lite').onchange = e => { lite = e.target.checked; try { localStorage.setItem('tf-lite', lite ? '1' : '0'); } catch (x) { /* ignore */ } fit(); if (lite) globe.controls().autoRotate = false; run(); paintHeat(); };
 document.addEventListener('visibilitychange', () => document.hidden ? globe.pauseAnimation() : globe.resumeAnimation());
 { const ctl = globe.controls(); let rt = 0;           // render at lower resolution while dragging, restore when idle
   ctl.addEventListener('start', () => { clearTimeout(rt); globe.renderer().setPixelRatio(lite ? .6 : .85); });
   ctl.addEventListener('end', () => { updateNames(); clearTimeout(rt); rt = setTimeout(() => { fit(); paintOutlines(); }, 400); });
   ctl.addEventListener('change', () => { if (tx.view === 'globe' && !tx.busy) updateHere(); });
   document.addEventListener('click', e => { const h = e.target.closest('#here'); if (h && +h.dataset.i >= 0) pick(+h.dataset.i); }); }
-new ResizeObserver(() => { document.documentElement.style.setProperty('--sbw', ($('#controls').hidden ? 0 : $('#controls').getBoundingClientRect().right) + 'px'); updateNames(); }).observe($('#controls'));
+function syncSidebarWidth() {
+  const controls = $('#controls');
+  document.documentElement.style.setProperty('--sbw', (controls.hidden ? 0 : controls.offsetLeft + controls.offsetWidth) + 'px');
+  updateNames();
+}
+new ResizeObserver(syncSidebarWidth).observe($('#controls'));
 
 /* ---------- Globe <-> About: about.html is fetched once, cached and kept in the page; only the two nav buttons trigger the move ---------- */
 const tx = { view: 'globe', busy: false, pov: null, rot: false, keep: null };

@@ -79,11 +79,11 @@ The player builds wildfire relief and prevention buildings and technology (optio
 
 ### Overview (first)
 - Only the **land-attributed heat map** is shown before a country is selected.
-- Three numbers: **country mean, highest, lowest**; highest and lowest are labeled on the globe.
-- Time slider with **Play** and a **Cumulative** toggle, under the location pill at the bottom of the globe.
+- **Overall detections** with a per-year hotspot bar chart, country average/highest/lowest, and a worldwide monthly seasonality chart.
+- Year slider with **Play** and a **Cumulative** toggle: cumulative mode supports a start/end range; single-year mode uses one endpoint.
 
 ### Selected country (then specific)
-Click a country: the others fade, **region/province outlines** appear colored by burning frequency, **3D hexagons** (top 1 / 10 / 25 / 50 / 100 % of hotspots, 10 % by default, set in Advanced settings) rise on top of the heat map, and a panel opens:
+Click a country: the others fade, **region/province outlines** appear colored by burning frequency, **3D hexagons** (top 1 / 10 / 25 % of hotspots, 10 % by default, set in View settings) rise on top of the heat map, and a panel opens:
 
 | Tab | Contents |
 |---|---|
@@ -92,16 +92,20 @@ Click a country: the others fade, **region/province outlines** appear colored by
 
 Region names come from Natural Earth admin-1 boundaries, loaded on first country selection from `assets/admin1.geojson` if present, otherwise from a CDN. Temperature comes from `dataset/temp.json`, written by `preprocess.py` (re-run `python run.py --rebuild` once).
 
+### Exports
+Open the **Export** tab to download the current global overview, selected-country, or drawn-area report as CSV or PNG. CSV files include summary metrics and available yearly/monthly series; report images include the summary and charts.
+
 Branding: **Powerr** for the TeraFlare wordmark, **Bricolage Grotesque** for headings and numbers, **Figtree** for body text and details (both from Google Fonts), plus the TeraFlare logos from `assets/`.
 
 ### Options
 - Lighting: **Day / Night / Live** (real-time sun position from UTC)
 - Sensor toggles: MODIS, VIIRS
 - Optional VIIRS-to-MODIS overlap normalization using the shared 2012+ period
-- Minimum confidence: Any / Nominal and high / High only
-- Area size: Wide (~110 km) / Fine (~55 km)
+- Hotspot confidence: high only (≥80% for MODIS; high-rated VIIRS detections)
+- Map grid: fine (~55 km)
 - Country search
-- **Low-end mode** (auto-detected, can be toggled)
+- Hexagon share: top 1 / 10 / 25 % of hotspots, set in View settings
+- Low-end rendering is always enabled
 
 ## How it works
 
@@ -189,7 +193,7 @@ This layout keeps the generated data and source assets separate, while making th
 
 - Heavy work happens **once** in preprocessing; the browser loads a compact binary summary.
 - Aggregations are memoized per setting; the cache is bounded to limit memory use. Raised-hotspot grow-in uses a few updates instead of rebuilding the scene every frame.
-- Heat-map KDE is capped at **2,000 input points**. **Low-end mode** (auto-on for ≤ 4 CPU cores or ≤ 4 GB RAM) also caps hexagon and hotspot inputs at 2,000; standard mode allows up to 6,000.
+- Heat-map KDE is capped at **2,000 input points**. Low-end rendering is always enabled and caps hexagon and hotspot inputs at 2,000.
 - Rendering pauses when the tab is hidden; respects `prefers-reduced-motion`.
 
 ## Limitations
@@ -211,8 +215,8 @@ Being honest about what the numbers mean:
 - [x] Land-attributed heat map, H3 3D hexagon columns, raised hotspot markers, country drill-down, per-location history
 - [x] Animation and low-end optimization
 - [x] Sensor-overlap normalization using the shared 2012+ period (requires both sensors in the input data)
-- [ ] Anomaly highlighting ("unusual conditions" vs. a location's baseline)
-- [ ] Area-of-interest selection finer than country (draw a region)
-- [ ] Potential **fire-spread** view when a hotspot ignites
-- [ ] Local **vegetation and terrain** context around hotspots
-- [ ] Export (CSV / image) for reports
+- [x] Anomaly highlighting ("unusual conditions" vs. a location's baseline)
+- [x] Area-of-interest selection finer than country (draw a region)
+- [x] Potential **fire-spread** view when a hotspot ignites
+- [x] Local **vegetation and terrain** context around hotspots
+- [x] Export (CSV / image) for reports
