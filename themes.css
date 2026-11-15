@@ -3,9 +3,11 @@
    Loaded after style.css.
    ===================================================================== */
 
-/* Layer stacking so theme skies/scenery sit behind the transparent globe, and UI sits above */
+/* Layer stacking so theme skies/scenery sit behind the transparent globe, About sits at z-index 4, and UI/nav sit above */
 #globe { position: fixed; inset: 0; z-index: 1; background: transparent !important; }
-.nav, .side, .tl, .busy, #hotspot-legend, #loading, #about-view, .egg-sans, .egg-say { z-index: 5; }
+#about-view { z-index: 4 !important; }
+.nav { z-index: 6 !important; }
+.side, .tl, .busy, #hotspot-legend, #loading, .egg-sans, .egg-say { z-index: 5; }
 
 /* ---------- Mario: pixel-art Mushroom Kingdom look ---------- */
 html[data-theme="mario"]{
@@ -60,6 +62,8 @@ html[data-theme="mario"] .btn:hover{filter:brightness(1.12)}
 html[data-theme="mario"] .btn:active{transform:translateY(3px);box-shadow:inset 0 -2px 0 rgba(0,0,0,.28),0 1px 0 #000}
 html[data-theme="mario"] .btn.ghost{background:#049cd8;color:#fff}
 html[data-theme="mario"] .btn.ghost:hover{background:#27b4ee}
+html[data-theme="mario"] .about-close{border:3px solid #000;border-radius:4px;background:#e52521;color:#fff;font-family:var(--head);font-size:14px;box-shadow:0 3px 0 #000}
+html[data-theme="mario"] .about-close:hover{background:#ff3b36}
 
 /* segmented controls, 3-tab bar, accordions, tiles, export card */
 html[data-theme="mario"] :is(.seg,.seg2,.seg3,.tabs,.sidebar-tabs){background:#0b1450;border:3px solid #000;border-radius:4px}
@@ -162,6 +166,8 @@ html[data-theme="undertale"] .btn:hover{background:#000;color:#ff0;border-color:
 html[data-theme="undertale"] .btn:active{background:#ff0;color:#000;transform:none}
 html[data-theme="undertale"] .btn.ghost{background:#000;color:#fff;border-color:#fff}
 html[data-theme="undertale"] .btn.ghost:hover{background:#000;color:#ff0;border-color:#ff0}
+html[data-theme="undertale"] .about-close{border:3px solid #fff;border-radius:0;background:#000;color:#ff0;font-family:var(--head);font-size:18px}
+html[data-theme="undertale"] .about-close:hover{background:#ff0;color:#000}
 
 /* tabs, segmented controls, accordions, tiles, export card */
 html[data-theme="undertale"] :is(.seg,.seg2,.seg3,.tabs,.sidebar-tabs){background:#000;border:3px solid #fff;border-radius:0}

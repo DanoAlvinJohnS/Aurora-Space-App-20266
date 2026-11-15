@@ -304,6 +304,10 @@ h1 .logo{display:inline-block;vertical-align:middle;margin-right:10px}
 #about-view{position:fixed;inset:0;z-index:4;overflow:auto;overscroll-behavior:contain;translate:0 100%;visibility:hidden;background:radial-gradient(1100px 700px at 50% 20%,rgba(4,6,13,.25),rgba(4,6,13,.8))}
 #about-view.on{translate:0 0;visibility:visible}
 #about-view .card{backdrop-filter:none;-webkit-backdrop-filter:none}
+#about-view .card:first-child{position:relative;padding-right:64px}
+.about-close{position:absolute;top:18px;right:18px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.28);color:#fff;font-size:22px;line-height:1;display:grid;place-items:center;cursor:pointer;transition:background .2s,transform .12s}
+.about-close:hover{background:rgba(255,255,255,.22)}
+.about-close:active{transform:scale(.92)}
 .away-l{translate:-100vw 0;opacity:0;visibility:hidden}.away-r{translate:100vw 0;opacity:0;visibility:hidden}
 #names,.here{transition:opacity .4s}
 body.in-about #names,body.in-about .here{opacity:0;pointer-events:none}

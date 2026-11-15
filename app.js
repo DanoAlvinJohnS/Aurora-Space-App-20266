@@ -1387,9 +1387,26 @@ async function preloadAbout() {
     html = hit ? await hit.text() : await fresh;                    // cached copy is instant; the network copy refreshes it for next time
   } catch (e) { try { html = await (await fetch('about.html')).text(); } catch (x) { /* about stays a normal link */ } }
   const main = new DOMParser().parseFromString(html, 'text/html').querySelector('main.page');
-  if (main) { AB.replaceChildren(document.importNode(main, true)); AB.dataset.ready = '1'; }
+  if (main) {
+    const hero = main.querySelector('.card');
+    if (hero) {
+      const xBtn = document.createElement('button');
+      xBtn.type = 'button';
+      xBtn.className = 'about-close';
+      xBtn.setAttribute('aria-label', 'Close About us');
+      xBtn.textContent = '×';
+      xBtn.addEventListener('click', () => go('globe'));
+      hero.appendChild(xBtn);
+    }
+    AB.replaceChildren(document.importNode(main, true));
+    const liveBtn = AB.querySelector('.about-close');
+    if (liveBtn) liveBtn.addEventListener('click', () => go('globe'));
+    AB.dataset.ready = '1';
+  }
 }
-const aboutReady = preloadAbout();
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && tx.view === 'about') go('globe');
+});
 const EASE = 'cubic-bezier(.65,0,.35,1)';                // ease in and out; these moves always play, also in low-end mode and with reduced motion
 async function slideOut(el, cls, ms) {
   if (!el || el.hidden) return;
