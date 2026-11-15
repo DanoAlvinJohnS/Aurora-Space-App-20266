@@ -9,11 +9,20 @@
   var KEY = 'tf-theme';
   var THEMES = [
     { id: 'classic', name: 'Classic', note: 'The original blue and orange on graphite' },
-    { id: 'nebula',  name: 'Nebula',  note: 'Deep space purple with a starfield' },
-    { id: 'aurora',  name: 'Aurora',  note: 'Northern-lights teal with sharper corners' }
+    { id: 'mario',   name: 'Mario',   note: 'Pixel-art sky, bricks and coin-block buttons' },
+    { id: 'undertale', name: 'Undertale', note: 'Black boxes, white borders and a red SOUL' }
   ];
   var root = document.documentElement, btn = null, menu = null;
 
+  var FONTS = {                                     // pixel fonts are only downloaded for the looks that use them
+    mario: 'https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&family=Press+Start+2P&display=swap',
+    undertale: 'https://fonts.googleapis.com/css2?family=DotGothic16&display=swap'
+  };
+  function loadFonts(id) {
+    var lid = 'tf-fonts-' + id;
+    if (!FONTS[id] || document.getElementById(lid)) return;
+    var l = document.createElement('link'); l.id = lid; l.rel = 'stylesheet'; l.href = FONTS[id]; document.head.appendChild(l);
+  }
   function valid(id) { return THEMES.some(function (t) { return t.id === id; }); }
   function saved() { try { var v = localStorage.getItem(KEY); if (valid(v)) return v; } catch (e) { /* storage blocked */ } return 'classic'; }
 
@@ -26,6 +35,7 @@
   function set(id, persist) {
     if (!valid(id)) id = 'classic';
     root.setAttribute('data-theme', id);
+    loadFonts(id);
     if (persist) { try { localStorage.setItem(KEY, id); } catch (e) { /* storage blocked */ } }
     sync();
     window.dispatchEvent(new CustomEvent('tf:theme', { detail: { id: id } }));

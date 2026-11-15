@@ -12,41 +12,184 @@
    in theme.js and a .theme-sw[data-t="..."] preview at the bottom of this file.
    ===================================================================== */
 
-/* ---------- Nebula: deep space purple ---------- */
-html[data-theme="nebula"]{
-  --blue:#7d4fff;--navy:#2a1670;--yellow:#ffb3ec;--orange:#ff5fc4;--dark:#1d0f2e;
-  --ink:#f7f3ff;--mute:#a79fc4;--glass-rgb:20,13,42;--line:rgba(160,130,230,.28);--fill:rgba(140,110,235,.17);--card:#241a47;--sel:#5b3fc0;--bluet:#b9a2ff;
-  --ac:125,79,255;--ac2:185,162,255;--a1:#c9b8ff;--a2:#8a5cff;--pk1:#ffc2f1;--pk2:#ff5fc4;--dotfill:#160d30;--focus:#b9a2ff;--cn-sel:#ffc2f1;
-  --base:7,3,15;
-  --glass-bd:rgba(185,162,255,.2);
-  --glass-sh:0 10px 40px rgba(6,1,20,.72),0 0 28px rgba(125,79,255,.12),inset 0 1px 0 rgba(215,200,255,.14);
-  --bg:radial-gradient(1000px 700px at 14% 6%,rgba(125,79,255,.34) 0,transparent 62%),radial-gradient(900px 650px at 90% 92%,rgba(255,95,196,.17) 0,transparent 58%),radial-gradient(700px 500px at 60% 40%,rgba(60,30,140,.25) 0,transparent 70%),#07030f;
-  --stars:radial-gradient(1px 1px at 23px 41px,rgba(255,255,255,.9),transparent),radial-gradient(1px 1px at 131px 97px,rgba(235,225,255,.7),transparent),radial-gradient(1.5px 1.5px at 77px 163px,#fff,transparent),
-          radial-gradient(1px 1px at 189px 52px,rgba(255,255,255,.6),transparent),radial-gradient(1px 1px at 251px 240px,rgba(220,200,255,.8),transparent),radial-gradient(1.6px 1.6px at 317px 121px,rgba(255,230,250,.9),transparent);
-  --stars-size:241px 241px,241px 241px,241px 241px,379px 379px,379px 379px,379px 379px;
-  --g-sky:css;--g-atmo-day:#cdb8ff;--g-atmo-night:#6a3fd6;--g-atmo-live:#8a5cff;--g-pick:#ffc2f1;--g-ring:214,170,255;
+/* ---------- Mario: pixel-art Mushroom Kingdom look (all art is CSS + inline SVG, no image files needed) ---------- */
+html[data-theme="mario"]{
+  --rk:.15;
+  --sf:"Pixelify Sans","Figtree",system-ui,sans-serif;--head:"Press Start 2P","Pixelify Sans",monospace;--title:"Press Start 2P","Pixelify Sans",monospace;
+  --blue:#e52521;--navy:#1f2f9b;--yellow:#fbd000;--orange:#f08a1c;--dark:#000;
+  --ink:#fff;--mute:#d3dcff;--glass-rgb:18,28,92;--glass:rgba(var(--glass-rgb),.97);--line:rgba(255,255,255,.4);--fill:rgba(255,255,255,.14);--card:#2b3fbd;--sel:#e52521;--bluet:#fbd000;
+  --ac:229,37,33;--ac2:251,208,0;--a1:#fbd000;--a2:#e52521;--pk1:#43b047;--pk2:#049cd8;--dotfill:#101a5e;--focus:#fbd000;--cn-sel:#fbd000;
+  --base:92,148,252;
+  --glass-bd:#000;
+  --glass-sh:inset 0 0 0 3px #fff,6px 6px 0 rgba(0,0,0,.35);
+  --bg:#5c94fc;
+  --stars:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='820' height='520' shape-rendering='crispEdges'%3E%3Cg transform='translate(70 90) scale(1.6)'%3E%3Crect x='10' y='20' width='100' height='30' fill='%23fff'/%3E%3Crect x='0' y='30' width='120' height='10' fill='%23fff'/%3E%3Crect x='25' y='10' width='30' height='10' fill='%23fff'/%3E%3Crect x='35' y='0' width='20' height='10' fill='%23fff'/%3E%3Crect x='65' y='10' width='30' height='10' fill='%23fff'/%3E%3Crect x='70' y='0' width='18' height='10' fill='%23fff'/%3E%3Crect x='10' y='40' width='100' height='10' fill='%23cfe3ff'/%3E%3C/g%3E%3Cg transform='translate(470 300) scale(2.2)'%3E%3Crect x='10' y='20' width='100' height='30' fill='%23fff'/%3E%3Crect x='0' y='30' width='120' height='10' fill='%23fff'/%3E%3Crect x='25' y='10' width='30' height='10' fill='%23fff'/%3E%3Crect x='35' y='0' width='20' height='10' fill='%23fff'/%3E%3Crect x='65' y='10' width='30' height='10' fill='%23fff'/%3E%3Crect x='70' y='0' width='18' height='10' fill='%23fff'/%3E%3Crect x='10' y='40' width='100' height='10' fill='%23cfe3ff'/%3E%3C/g%3E%3Cg transform='translate(640 40) scale(1.1)'%3E%3Crect x='10' y='20' width='100' height='30' fill='%23fff'/%3E%3Crect x='0' y='30' width='120' height='10' fill='%23fff'/%3E%3Crect x='25' y='10' width='30' height='10' fill='%23fff'/%3E%3Crect x='35' y='0' width='20' height='10' fill='%23fff'/%3E%3Crect x='65' y='10' width='30' height='10' fill='%23fff'/%3E%3Crect x='70' y='0' width='18' height='10' fill='%23fff'/%3E%3Crect x='10' y='40' width='100' height='10' fill='%23cfe3ff'/%3E%3C/g%3E%3C/svg%3E");
+  --stars-size:820px 520px;
+  --g-sky:css;--g-atmo-day:#cfe6ff;--g-atmo-night:#1b2a80;--g-atmo-live:#7fb2ff;--g-pick:#fbd000;--g-ring:251,208,0;
 }
-html[data-theme="nebula"] .sans{filter:drop-shadow(0 0 10px rgba(185,162,255,.9)) drop-shadow(0 0 22px rgba(125,79,255,.55))}
-html[data-theme="nebula"] .sans-say{box-shadow:0 0 18px rgba(168,85,247,.6)}
+html[data-theme="mario"] body{font-size:17px;letter-spacing:0}
+/* brick ground along the bottom of every page */
+html[data-theme="mario"] body::after{content:"";position:fixed;left:0;right:0;bottom:0;height:36px;z-index:-1;pointer-events:none;
+  border-top:4px solid #000;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' shape-rendering='crispEdges'%3E%3Crect width='32' height='32' fill='%23c84c0c'/%3E%3Cpath d='M0 1h32M0 17h32M16 1v16M1 17v15M31 17v15' stroke='%23000' stroke-width='2' fill='none'/%3E%3Cpath d='M2 3h12M18 3h12M3 19h12M19 19h10' stroke='%23fca046' stroke-width='2' fill='none'/%3E%3C/svg%3E") repeat-x 0 0/32px 32px}
 
-/* ---------- Aurora: northern-lights teal, sharper corners, DM Sans ---------- */
-html[data-theme="aurora"]{
-  --rk:.6;
-  --sf:"DM Sans","Figtree",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--head:"DM Sans","Figtree",system-ui,sans-serif;
-  --blue:#08826d;--navy:#0a3a40;
-  --ink:#effffb;--mute:#8fb0aa;--glass-rgb:6,22,24;--line:rgba(110,190,175,.26);--fill:rgba(100,185,170,.15);--card:#0e2b2d;--sel:#1d6b63;--bluet:#6ee7c8;
-  --ac:20,184,143;--ac2:110,231,200;--a1:#7ff0d4;--a2:#14b88f;--dotfill:#06181a;--focus:#6ee7c8;--cn-sel:#9bffe0;
-  --base:3,11,13;
-  --glass-bd:rgba(110,231,200,.2);
-  --glass-sh:0 10px 40px rgba(0,8,8,.7),0 0 26px rgba(34,201,165,.1),inset 0 1px 0 rgba(160,255,230,.12);
-  --bg:radial-gradient(1100px 700px at 8% 0,rgba(34,201,165,.28) 0,transparent 60%),radial-gradient(900px 600px at 95% 15%,rgba(124,92,255,.2) 0,transparent 58%),radial-gradient(1000px 500px at 50% 105%,rgba(20,184,143,.16) 0,transparent 60%),#030b0d;
-  --stars:radial-gradient(1px 1px at 37px 29px,rgba(255,255,255,.85),transparent),radial-gradient(1px 1px at 149px 113px,rgba(215,255,245,.7),transparent),radial-gradient(1.5px 1.5px at 91px 181px,#fff,transparent),
-          radial-gradient(1px 1px at 203px 67px,rgba(255,255,255,.6),transparent),radial-gradient(1px 1px at 263px 229px,rgba(190,255,235,.8),transparent),radial-gradient(1.6px 1.6px at 331px 137px,rgba(225,255,248,.9),transparent);
-  --stars-size:251px 251px,251px 251px,251px 251px,383px 383px,383px 383px,383px 383px;
-  --g-sky:css;--g-atmo-day:#8ff0d8;--g-atmo-night:#1f9e86;--g-atmo-live:#22c9a5;--g-pick:#7ff0d4;--g-ring:110,231,200;
+/* flat, outlined panels instead of frosted glass */
+html[data-theme="mario"] .glass{border-width:4px;border-style:solid;backdrop-filter:none;-webkit-backdrop-filter:none}
+html[data-theme="mario"] :is(.nav,.nav div,.nav div a,.tl,.busy,.here,.btn,.cn,.theme-btn,#hotspot-legend){border-radius:calc(8px*var(--rk))}
+html[data-theme="mario"] .theme-btn{border:3px solid #000;border-radius:50%;background:#fbd000;box-shadow:inset 0 -3px 0 rgba(0,0,0,.25)}
+html[data-theme="mario"] .theme-btn:hover,html[data-theme="mario"] .theme-btn[aria-expanded="true"]{background:#fff27a}
+html[data-theme="mario"] .theme-btn i{border:2px solid #000;box-shadow:none}
+html[data-theme="mario"] .theme-menu{border:4px solid #000;border-radius:4px;background:rgb(var(--glass-rgb));box-shadow:inset 0 0 0 3px #fff,6px 6px 0 rgba(0,0,0,.35)}
+html[data-theme="mario"] .theme-opt{border-radius:4px}
+html[data-theme="mario"] .theme-opt b{font-size:11px;line-height:1.4}
+html[data-theme="mario"] .theme-opt[aria-checked="true"]{background:rgba(251,208,0,.22)}
+html[data-theme="mario"] .theme-sw{border:3px solid #000;border-radius:3px}
+
+/* type: Press Start 2P for titles and numbers (it is very wide, so sizes are smaller) */
+html[data-theme="mario"] :is(h1,h2,h3,.name){line-height:1.45}
+html[data-theme="mario"] .brand{font-size:12px;letter-spacing:0;word-spacing:0;color:#fff;text-shadow:2px 2px 0 #000}
+html[data-theme="mario"] .sidebar-head h1{font-size:15px;letter-spacing:0;text-shadow:2px 2px 0 #000}
+html[data-theme="mario"] .side h2,html[data-theme="mario"] #status h2{font-size:13px;letter-spacing:0;text-shadow:2px 2px 0 #000}
+html[data-theme="mario"] .side h3{font-size:10px;letter-spacing:0;color:#fbd000}
+html[data-theme="mario"] .big span{font-size:20px;letter-spacing:0;color:#fff;text-shadow:3px 3px 0 #000}
+html[data-theme="mario"] .tile b{font-size:11px;color:#fff;text-shadow:2px 2px 0 #000}
+html[data-theme="mario"] .chead h3,html[data-theme="mario"] .here b,html[data-theme="mario"] .drop b{font-size:10px;letter-spacing:0}
+html[data-theme="mario"] #detail .name{font-size:13px;color:#fbd000;text-shadow:2px 2px 0 #000}
+html[data-theme="mario"] .page .card h2{font-size:14px;letter-spacing:0}
+html[data-theme="mario"] .page .card:nth-child(1) h1{font-size:clamp(20px,4.2vw,34px);letter-spacing:0;line-height:1.35;text-shadow:4px 4px 0 #000}
+html[data-theme="mario"] .hint{color:#d3dcff}
+
+/* buttons: chunky coin-block style, they sink when pressed */
+html[data-theme="mario"] .btn{border:3px solid #000;font:400 10px/1.4 var(--head);text-transform:uppercase;letter-spacing:0;padding:11px 16px;
+  box-shadow:inset 0 -4px 0 rgba(0,0,0,.28),0 4px 0 #000;transition:none}
+html[data-theme="mario"] .btn:hover{filter:brightness(1.12)}
+html[data-theme="mario"] .btn:active{transform:translateY(3px);box-shadow:inset 0 -2px 0 rgba(0,0,0,.28),0 1px 0 #000}
+html[data-theme="mario"] .btn.ghost{background:#049cd8;color:#fff}
+html[data-theme="mario"] .btn.ghost:hover{background:#27b4ee}
+
+/* segmented controls, tabs, accordions, tiles: dark outline + red "selected" like a menu cursor */
+html[data-theme="mario"] :is(.seg,.seg2,.seg3,.tabs,.sidebar-tabs){background:#0b1450;border:3px solid #000;border-radius:4px}
+html[data-theme="mario"] :is(.seg button,.seg2 button,.seg3 button,.tabs button,.sidebar-tabs button){border-radius:2px;color:#d3dcff}
+html[data-theme="mario"] :is(.seg button[aria-pressed=true],.seg2 button[aria-pressed=true],.seg3 button[aria-pressed=true],.tabs button.on,.sidebar-tabs button[aria-selected="true"]){background:#e52521;color:#fff;box-shadow:inset 0 -3px 0 rgba(0,0,0,.3)}
+html[data-theme="mario"] .acc-h{background:#2b3fbd;border:3px solid #000;border-radius:4px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.25)}
+html[data-theme="mario"] fieldset{border:3px solid #000;border-radius:4px;background:rgba(0,0,0,.18)}
+html[data-theme="mario"] .tile{border:3px solid #000;border-radius:4px;color:#fff;box-shadow:inset 0 0 0 2px rgba(255,255,255,.3)}
+html[data-theme="mario"] .tile:nth-child(1){background:#c84c0c}
+html[data-theme="mario"] .tile:nth-child(2){background:#43b047;color:#fff}
+html[data-theme="mario"] .tile:nth-child(2) b{color:#fff}
+html[data-theme="mario"] .tile:nth-child(3){background:#1f2f9b;color:#fff}
+html[data-theme="mario"] .tile:nth-child(3) b{color:#fff}
+html[data-theme="mario"] .stats div{border:2px solid #000;border-radius:3px;background:rgba(0,0,0,.25)}
+html[data-theme="mario"] :is(select,#csearch){border:3px solid #000;border-radius:4px;background-color:#0b1450;color:#fff}
+html[data-theme="mario"] select option{background:#0b1450;color:#fff}
+html[data-theme="mario"] .ci.sel{background:#e52521;color:#fff;border-radius:3px}
+
+/* switches = green pipes' on-state, sliders = yellow "?" blocks */
+html[data-theme="mario"] input[type=checkbox]{border:3px solid #000;border-radius:4px;background:#5a5a78}
+html[data-theme="mario"] input[type=checkbox]::after{top:1px;left:1px;width:16px;height:16px;border-radius:2px;background:#fff;box-shadow:none}
+html[data-theme="mario"] input[type=checkbox]:checked{background:#43b047}
+html[data-theme="mario"] input[type=checkbox]:checked::after{transform:translateX(16px)}
+html[data-theme="mario"] input[type=range]{height:8px;border-radius:2px;background:#000}
+html[data-theme="mario"] input[type=range]::-webkit-slider-thumb{width:22px;height:22px;border:3px solid #000;border-radius:3px;background:#fbd000;box-shadow:inset 0 -3px 0 rgba(0,0,0,.25)}
+html[data-theme="mario"] input[type=range]::-moz-range-thumb{width:16px;height:16px;border:3px solid #000;border-radius:3px;background:#fbd000;box-shadow:none}
+html[data-theme="mario"] input[type=range]::-moz-range-track{height:8px;border-radius:2px;background:#000}
+html[data-theme="mario"] .progress{border:2px solid #000;border-radius:2px;background:#0b1450}
+html[data-theme="mario"] .progress i{background:#fbd000;border-radius:0}
+
+/* easter egg speech box as a pixel box */
+html[data-theme="mario"] .egg-say{border:3px solid #000;border-radius:2px;box-shadow:4px 4px 0 rgba(0,0,0,.4)}
+
+/* ---------- Undertale / Deltarune: black boxes, white borders, a red SOUL (all art is CSS + inline SVG) ---------- */
+html[data-theme="undertale"]{
+  --rk:0;font-synthesis:none;
+  --sf:"DotGothic16","Pixelify Sans",ui-monospace,monospace;--head:"DotGothic16","Pixelify Sans",ui-monospace,monospace;--title:"DotGothic16","Pixelify Sans",ui-monospace,monospace;
+  --blue:#ff7f27;--navy:#000;--yellow:#ff0;--orange:#ff7f27;--dark:#000;
+  --ink:#fff;--mute:#b9b9cf;--glass-rgb:0,0,0;--glass:#000;--line:rgba(255,255,255,.45);--fill:rgba(255,255,255,.12);--card:#000;--sel:#ff0;--bluet:#ff0;
+  --ac:255,255,0;--ac2:255,255,0;--a1:#ff0;--a2:#f00;--pk1:#00e5ff;--pk2:#ff4ad8;--dotfill:#000;--focus:#ff0;--cn-sel:#ff0;
+  --base:2,1,10;
+  --glass-bd:#fff;--glass-sh:none;
+  --bg:#02010a;
+  --stars:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480' shape-rendering='crispEdges'%3E%3Crect x='106' y='4' width='4' height='4' fill='%235ad7ff' fill-opacity='0.55'/%3E%3Crect x='466' y='122' width='2' height='2' fill='%23fff' fill-opacity='0.55'/%3E%3Crect x='438' y='354' width='2' height='2' fill='%23fff' fill-opacity='0.8'/%3E%3Crect x='238' y='362' width='2' height='2' fill='%23fff' fill-opacity='0.8'/%3E%3Crect x='176' y='116' width='2' height='2' fill='%235ad7ff' fill-opacity='0.8'/%3E%3Crect x='114' y='156' width='6' height='6' fill='%23fff' fill-opacity='0.55'/%3E%3Crect x='294' y='232' width='4' height='4' fill='%23fff' fill-opacity='1'/%3E%3Crect x='288' y='408' width='2' height='2' fill='%23fff' fill-opacity='0.8'/%3E%3Crect x='354' y='330' width='4' height='4' fill='%23fff' fill-opacity='0.35'/%3E%3Crect x='250' y='428' width='2' height='2' fill='%23fff' fill-opacity='0.55'/%3E%3Crect x='314' y='400' width='6' height='6' fill='%235ad7ff' fill-opacity='0.35'/%3E%3Crect x='146' y='270' width='4' height='4' fill='%23fff' fill-opacity='0.35'/%3E%3Crect x='456' y='58' width='4' height='4' fill='%23fff' fill-opacity='1'/%3E%3Crect x='370' y='430' width='4' height='4' fill='%23fff' fill-opacity='0.55'/%3E%3Crect x='90' y='278' width='4' height='4' fill='%23fff' fill-opacity='0.55'/%3E%3Crect x='158' y='158' width='2' height='2' fill='%235ad7ff' fill-opacity='0.8'/%3E%3Crect x='198' y='462' width='4' height='4' fill='%23fff' fill-opacity='1'/%3E%3Crect x='400' y='36' width='2' height='2' fill='%23fff' fill-opacity='0.35'/%3E%3Crect x='346' y='252' width='4' height='4' fill='%23fff' fill-opacity='0.8'/%3E%3Crect x='378' y='46' width='2' height='2' fill='%23fff' fill-opacity='1'/%3E%3Crect x='456' y='30' width='2' height='2' fill='%23fff' fill-opacity='1'/%3E%3Crect x='288' y='246' width='4' height='4' fill='%23fff' fill-opacity='0.35'/%3E%3Crect x='242' y='430' width='2' height='2' fill='%23fff' fill-opacity='1'/%3E%3Crect x='118' y='398' width='4' height='4' fill='%23fff' fill-opacity='0.8'/%3E%3Crect x='346' y='42' width='4' height='4' fill='%23fff' fill-opacity='0.8'/%3E%3Crect x='384' y='332' width='4' height='4' fill='%23fff' fill-opacity='0.35'/%3E%3Crect x='316' y='360' width='2' height='2' fill='%23fff' fill-opacity='0.8'/%3E%3Crect x='280' y='420' width='2' height='2' fill='%235ad7ff' fill-opacity='1'/%3E%3Crect x='6' y='456' width='6' height='6' fill='%23ff6ad5' fill-opacity='1'/%3E%3Crect x='464' y='264' width='2' height='2' fill='%23fff' fill-opacity='0.55'/%3E%3Crect x='254' y='262' width='2' height='2' fill='%23fff' fill-opacity='0.55'/%3E%3Crect x='350' y='300' width='2' height='2' fill='%23fff' fill-opacity='0.35'/%3E%3Crect x='308' y='180' width='6' height='6' fill='%23fff' fill-opacity='0.35'/%3E%3Crect x='436' y='88' width='6' height='6' fill='%235ad7ff' fill-opacity='0.35'/%3E%3C/svg%3E");--stars-size:480px 480px;
+  --g-sky:css;--g-atmo-day:#e8f0ff;--g-atmo-night:#2b3dff;--g-atmo-live:#00b7ff;--g-pick:#ff0;--g-ring:255,255,0;
 }
-html[data-theme="aurora"] .sans{filter:drop-shadow(0 0 10px rgba(110,231,200,.85)) drop-shadow(0 0 22px rgba(20,184,143,.5))}
-html[data-theme="aurora"] .sans-say{box-shadow:0 0 18px rgba(34,201,165,.55)}
+html[data-theme="undertale"] body{font-size:16px;letter-spacing:0}
+html[data-theme="undertale"] :is(h1,h2,h3,b,strong,.name,.brand,.big span,.tile b){font-weight:400;letter-spacing:0}
+
+/* dialogue boxes: pure black with a thick white border */
+html[data-theme="undertale"] .glass{border:5px solid #fff;border-radius:0;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none}
+html[data-theme="undertale"] :is(.nav,.nav div,.nav div a,.tl,.busy,.here,.btn,.cn,#hotspot-legend){border-radius:0}
+html[data-theme="undertale"] .nav div{background:#000;border:3px solid #fff}
+html[data-theme="undertale"] .nav div a{color:#fff}
+html[data-theme="undertale"] .nav div a.active{background:#ff0;color:#000;box-shadow:none}
+html[data-theme="undertale"] .brand{font-size:17px}
+html[data-theme="undertale"] .brand::before{width:22px;height:19px;border-radius:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 6' shape-rendering='crispEdges' fill='%23f00'%3E%3Crect x='1' y='0' width='2' height='1'/%3E%3Crect x='4' y='0' width='2' height='1'/%3E%3Crect x='0' y='1' width='7' height='2'/%3E%3Crect x='1' y='3' width='5' height='1'/%3E%3Crect x='2' y='4' width='3' height='1'/%3E%3Crect x='3' y='5' width='1' height='1'/%3E%3C/svg%3E") center/contain no-repeat;box-shadow:none}
+html[data-theme="undertale"] p.hint::before{content:"* "}
+html[data-theme="undertale"] .hint{color:#b9b9cf}
+html[data-theme="undertale"] :is(.side h2,#status h2,.sidebar-head h1){color:#fff}
+html[data-theme="undertale"] .side h3{color:#ff0;letter-spacing:0}
+html[data-theme="undertale"] #detail .name{color:#ff0}
+html[data-theme="undertale"] .page .card h2{color:#ff0}
+html[data-theme="undertale"] .page .card:nth-child(n){background:#000;color:#fff;--ink:#fff;--mute:#b9b9cf;border:5px solid #fff}
+html[data-theme="undertale"] .page .card:nth-child(1){border-color:#ff0}
+html[data-theme="undertale"] .page .card:nth-child(3){border-color:#ff7f27}
+html[data-theme="undertale"] .page .card:nth-child(4){border-color:#00b7ff}
+html[data-theme="undertale"] .page .card:nth-child(1) h1{color:#fff;text-shadow:4px 4px 0 #f00}
+
+/* the battle menu: orange outline buttons that turn yellow when picked */
+html[data-theme="undertale"] .btn{background:#000;color:#ff7f27;border:4px solid #ff7f27;text-transform:uppercase;font-weight:400;letter-spacing:0;padding:9px 16px;box-shadow:none;transition:none}
+html[data-theme="undertale"] .btn:hover{background:#000;color:#ff0;border-color:#ff0;filter:none}
+html[data-theme="undertale"] .btn:active{background:#ff0;color:#000;transform:none}
+html[data-theme="undertale"] .btn.ghost{background:#000;color:#fff;border-color:#fff}
+html[data-theme="undertale"] .btn.ghost:hover{background:#000;color:#ff0;border-color:#ff0}
+
+/* tabs, segmented controls, accordions, tiles */
+html[data-theme="undertale"] :is(.seg,.seg2,.seg3,.tabs,.sidebar-tabs){background:#000;border:3px solid #fff;border-radius:0}
+html[data-theme="undertale"] :is(.seg button,.seg2 button,.seg3 button,.tabs button,.sidebar-tabs button){border-radius:0;color:#fff;box-shadow:none}
+html[data-theme="undertale"] :is(.seg button[aria-pressed=true],.seg2 button[aria-pressed=true],.seg3 button[aria-pressed=true],.tabs button.on,.sidebar-tabs button[aria-selected="true"]){background:#ff0;color:#000;box-shadow:none}
+html[data-theme="undertale"] .acc-h{background:#000;border:3px solid #fff;border-radius:0;color:#fff}
+html[data-theme="undertale"] .acc-h:hover{color:#ff0;border-color:#ff0}
+html[data-theme="undertale"] fieldset{border:3px solid #fff;border-radius:0;background:transparent}
+html[data-theme="undertale"] .tile{background:#000;border:3px solid #fff;border-radius:0;color:#fff;box-shadow:none}
+html[data-theme="undertale"] .tile:nth-child(2){border-color:#ff0;color:#ff0}
+html[data-theme="undertale"] .tile:nth-child(3){border-color:#00b7ff;color:#00b7ff}
+html[data-theme="undertale"] .tile b{color:#fff}
+html[data-theme="undertale"] .tile:nth-child(2) b{color:#ff0}
+html[data-theme="undertale"] .tile:nth-child(3) b{color:#00b7ff}
+html[data-theme="undertale"] .stats div{background:#000;border:2px solid #fff;border-radius:0}
+html[data-theme="undertale"] :is(select,#csearch){border:3px solid #fff;border-radius:0;background-color:#000;color:#fff}
+html[data-theme="undertale"] select option{background:#000;color:#fff}
+
+/* the SOUL marks whatever is selected */
+html[data-theme="undertale"] .ci{position:relative}
+html[data-theme="undertale"] .ci.sel{background:transparent;color:#ff0;border-radius:0;padding-left:28px}
+html[data-theme="undertale"] .ci.sel::before{content:"";position:absolute;left:6px;top:50%;width:14px;height:12px;margin-top:-6px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 6' shape-rendering='crispEdges' fill='%23f00'%3E%3Crect x='1' y='0' width='2' height='1'/%3E%3Crect x='4' y='0' width='2' height='1'/%3E%3Crect x='0' y='1' width='7' height='2'/%3E%3Crect x='1' y='3' width='5' height='1'/%3E%3Crect x='2' y='4' width='3' height='1'/%3E%3Crect x='3' y='5' width='1' height='1'/%3E%3C/svg%3E") center/contain no-repeat}
+html[data-theme="undertale"] .theme-btn{border:3px solid #fff;border-radius:0;background:#000;box-shadow:none}
+html[data-theme="undertale"] .theme-btn:hover,html[data-theme="undertale"] .theme-btn[aria-expanded="true"]{background:#222}
+html[data-theme="undertale"] .theme-btn i{width:22px;height:19px;border-radius:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 6' shape-rendering='crispEdges' fill='%23f00'%3E%3Crect x='1' y='0' width='2' height='1'/%3E%3Crect x='4' y='0' width='2' height='1'/%3E%3Crect x='0' y='1' width='7' height='2'/%3E%3Crect x='1' y='3' width='5' height='1'/%3E%3Crect x='2' y='4' width='3' height='1'/%3E%3Crect x='3' y='5' width='1' height='1'/%3E%3C/svg%3E") center/contain no-repeat;box-shadow:none}
+html[data-theme="undertale"] .theme-menu{border:4px solid #fff;border-radius:0;background:#000;box-shadow:none}
+html[data-theme="undertale"] .theme-opt{border-radius:0}
+html[data-theme="undertale"] .theme-opt b{font-weight:400}
+html[data-theme="undertale"] .theme-opt[aria-checked="true"]{background:transparent}
+html[data-theme="undertale"] .theme-opt[aria-checked="true"] b{color:#ff0}
+html[data-theme="undertale"] .theme-opt .ck{border:0;border-radius:0;opacity:1;background:none}
+html[data-theme="undertale"] .theme-opt[aria-checked="true"] .ck{background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 6' shape-rendering='crispEdges' fill='%23f00'%3E%3Crect x='1' y='0' width='2' height='1'/%3E%3Crect x='4' y='0' width='2' height='1'/%3E%3Crect x='0' y='1' width='7' height='2'/%3E%3Crect x='1' y='3' width='5' height='1'/%3E%3Crect x='2' y='4' width='3' height='1'/%3E%3Crect x='3' y='5' width='1' height='1'/%3E%3C/svg%3E") center/contain no-repeat}
+html[data-theme="undertale"] .theme-sw{border:3px solid #fff;border-radius:0}
+
+/* switches, sliders (the thumb is the SOUL) and the HP-style progress bar */
+html[data-theme="undertale"] input[type=checkbox]{border:3px solid #fff;border-radius:0;background:#000}
+html[data-theme="undertale"] input[type=checkbox]::after{top:1px;left:1px;width:16px;height:16px;border-radius:0;background:#fff;box-shadow:none}
+html[data-theme="undertale"] input[type=checkbox]:checked{background:#ff0}
+html[data-theme="undertale"] input[type=checkbox]:checked::after{background:#000;transform:translateX(16px)}
+html[data-theme="undertale"] input[type=range]{height:6px;border-radius:0;background:#fff}
+html[data-theme="undertale"] input[type=range]::-webkit-slider-thumb{width:22px;height:19px;border:0;border-radius:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 6' shape-rendering='crispEdges' fill='%23f00'%3E%3Crect x='1' y='0' width='2' height='1'/%3E%3Crect x='4' y='0' width='2' height='1'/%3E%3Crect x='0' y='1' width='7' height='2'/%3E%3Crect x='1' y='3' width='5' height='1'/%3E%3Crect x='2' y='4' width='3' height='1'/%3E%3Crect x='3' y='5' width='1' height='1'/%3E%3C/svg%3E") center/contain no-repeat;box-shadow:none}
+html[data-theme="undertale"] input[type=range]::-moz-range-thumb{width:22px;height:19px;border:0;border-radius:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 6' shape-rendering='crispEdges' fill='%23f00'%3E%3Crect x='1' y='0' width='2' height='1'/%3E%3Crect x='4' y='0' width='2' height='1'/%3E%3Crect x='0' y='1' width='7' height='2'/%3E%3Crect x='1' y='3' width='5' height='1'/%3E%3Crect x='2' y='4' width='3' height='1'/%3E%3Crect x='3' y='5' width='1' height='1'/%3E%3C/svg%3E") center/contain no-repeat;box-shadow:none}
+html[data-theme="undertale"] input[type=range]::-moz-range-track{height:6px;border-radius:0;background:#fff}
+html[data-theme="undertale"] .progress{border:0;border-radius:0;background:#f00}
+html[data-theme="undertale"] .progress i{background:#ff0;border-radius:0}
+
+/* easter egg speech box as a black dialogue box (Sans keeps a white glow) */
+html[data-theme="undertale"] .egg-sans{filter:drop-shadow(0 0 8px rgba(255,255,255,.7))}
+html[data-theme="undertale"] .egg-say{background:#000;color:#fff;border:4px solid #fff;border-radius:0;box-shadow:none;font-family:var(--sf)}
+html[data-theme="undertale"] .egg-say::after{border-top-color:#fff}
 
 /* the starfield sits behind the transparent globe canvas (only themes that set --stars) */
 body::before{background-size:var(--stars-size,auto)}
@@ -74,8 +217,8 @@ body::before{background-size:var(--stars-size,auto)}
 .theme-sw::before{content:"";position:absolute;left:0;top:0;bottom:0;width:34%;background:var(--sw-panel);border-right:1px solid var(--sw-edge)}
 .theme-sw::after{content:"";position:absolute;right:-5px;top:50%;width:22px;height:22px;margin-top:-11px;border-radius:50%;background:var(--sw-globe);box-shadow:0 0 8px var(--sw-glow)}
 .theme-sw[data-t="classic"]{--sw-bg:#04060d;--sw-panel:rgba(44,44,46,.95);--sw-edge:rgba(255,255,255,.16);--sw-globe:radial-gradient(circle at 35% 30%,#8fb0ff,#4a7ff8 45%,#1e3266);--sw-glow:rgba(74,127,248,.7)}
-.theme-sw[data-t="nebula"]{--sw-bg:#07030f;--sw-panel:rgba(36,26,71,.95);--sw-edge:rgba(185,162,255,.3);--sw-globe:radial-gradient(circle at 35% 30%,#d9c9ff,#8a5cff 45%,#2a1670);--sw-glow:rgba(138,92,255,.8)}
-.theme-sw[data-t="aurora"]{--sw-bg:#030b0d;--sw-panel:rgba(14,43,45,.95);--sw-edge:rgba(110,231,200,.3);--sw-globe:radial-gradient(circle at 35% 30%,#9ff5df,#14b88f 45%,#0a3a40);--sw-glow:rgba(34,201,165,.7)}
+.theme-sw[data-t="mario"]{--sw-bg:#5c94fc;--sw-panel:#2b3fbd;--sw-edge:#000;--sw-globe:radial-gradient(circle at 35% 30%,#fff4a8,#fbd000 50%,#b8860b);--sw-glow:rgba(251,208,0,.8)}
+.theme-sw[data-t="undertale"]{--sw-bg:#000;--sw-panel:#000;--sw-edge:#fff;--sw-globe:#f00;--sw-glow:rgba(255,0,0,.75)}
 
 /* the extra button needs a little room on phones */
 @media(max-width:480px){.nav{gap:8px;padding-left:14px}.nav div a{padding:6px 11px}.brand{font-size:14px}}
