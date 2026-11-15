@@ -22,7 +22,7 @@ let light = 'live', mat = null, T = null, sun = { lat: 0, lng: 0 };
 let heatFloor = 0, heatRef = 1;
 
 /* ---------- globe: one merged mesh for all columns, country polygons on top ---------- */
-const globe = Globe()($('#globe'))
+const globe = Globe({ rendererConfig: { alpha: true } })($('#globe'))
   .backgroundImageUrl(CDN + 'night-sky.png')
   .showAtmosphere(true).atmosphereAltitude(0.2).atmosphereColor(ATMO.live)
   .pointLat('lat').pointLng('lng').pointAltitude('alt').pointColor('col').pointRadius('r')
@@ -44,6 +44,26 @@ const globe = Globe()($('#globe'))
 globe.controls().autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches && !lite;
 globe.controls().autoRotateSpeed = 0.4;
 const fit = () => { globe.renderer().setPixelRatio(lite ? 1 : Math.min(devicePixelRatio || 1, 1.5)); globe.width(innerWidth).height(innerHeight); };
+addEventListener('resize', () => { fit(); updateNames(); }); fit();
+
+function applyTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  const sky = cs.getPropertyValue('--g-sky').trim();
+  const atmo = cs.getPropertyValue('--g-atmo-' + light).trim() || ATMO[light];
+  const ring = cs.getPropertyValue('--g-ring').trim() || '255,200,80';
+
+  if (sky === 'css') {
+    globe.backgroundImageUrl(null).backgroundColor('rgba(0,0,0,0)');
+    globe.renderer().setClearColor(0x000000, 0);
+  } else {
+    globe.backgroundImageUrl(CDN + 'night-sky.png').backgroundColor('#000011');
+    globe.renderer().setClearColor(0x000011, 1);
+  }
+  globe.atmosphereColor(atmo);
+  globe.ringColor(() => t => `rgba(${ring},${1 - t})`);
+}
+applyTheme();
+window.addEventListener('tf:theme', applyTheme);
 addEventListener('resize', () => { fit(); updateNames(); }); fit();
 
 /* ---------- spring camera: starts from where the globe is NOW, keeps its velocity if interrupted ---------- */
