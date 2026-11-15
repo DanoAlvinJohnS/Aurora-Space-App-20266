@@ -1,0 +1,100 @@
+name: Build TeraFlare data from Azure SQL
+
+# Independent of Vercel production deployment. This never writes to Azure SQL,
+# commits generated data, or deploys to production.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Use smoke first; full can be slow/expensive for 502M rows'
+        required: true
+        type: choice
+        options: [smoke, full]
+        default: smoke
+
+permissions:
+  contents: read
+
+concurrency:
+  group: teraflare-azure-data-readonly
+  cancel-in-progress: false
+
+jobs:
+  azure-data:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: azure-data
+    timeout-minutes: 350
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_SQL_AUTH: cli
+      AZURE_SQL_SERVER: rocketeers64
+      AZURE_SQL_DATABASE: Teraflare_Data
+      BUILD_MODE: ${{ inputs.mode }}
+    steps:
+      - name: Checkout reviewed main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Install ODBC Driver 18 for Azure SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! odbcinst -q -d 2>/dev/null | grep -Fq '[ODBC Driver 18 for SQL Server]'; then
+            curl -fsSLo /tmp/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
+            sudo dpkg -i /tmp/packages-microsoft-prod.deb
+            sudo apt-get update
+            sudo env ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          fi
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt -r requirements-sql.txt
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Sign in to Azure using OIDC
+        uses: azure/login@v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build local files from read-only SQL query
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$BUILD_MODE" == 'smoke' ]]; then
+            python preprocess.py --source sql --tables dbo.firms_modis,dbo.firms_viirs --sql-aggregate --sql-sample-percent 0.01
+          else
+            echo 'Starting full data build. This scans approximately 502 million database rows.'
+            python preprocess.py --source sql --tables dbo.firms_modis,dbo.firms_viirs --sql-aggregate
+          fi
+      - name: Verify generated files and metadata
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, pathlib, os
+          d = json.loads(pathlib.Path('dataset/fire.json').read_text())
+          source = d['overlap']['source']
+          expected = 'sql_sample' if os.environ['BUILD_MODE'] == 'smoke' else 'sql'
+          assert source == expected, (source, expected)
+          assert d['rows'] > 0, d['rows']
+          assert pathlib.Path('dataset/fire.bin').stat().st_size > 0
+          assert pathlib.Path('dataset/temp.json').exists()
+          if expected == 'sql_sample':
+              assert not d['overlap']['available'], 'A sample must never claim calibrated coverage'
+          print('Verified', source, 'rows:', d['rows'], 'shared years:', d['overlap']['years'])
+          PY
+      - name: Upload generated dataset for review (no deployment)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: teraflare-${{ inputs.mode }}-data
+          path: |
+            dataset/fire.bin
+            dataset/fire.json
+            dataset/temp.json
+          retention-days: 7
+          if-no-files-found: error

@@ -6,6 +6,8 @@ Re-run whenever the CSV files change."""
 import json, time, pathlib
 import numpy as np, pandas as pd, shapely
 from shapely.geometry import shape
+from count_helpers import grouped_sums, add_weighted
+from sql_aggregate import grouped_query
 
 root = pathlib.Path(__file__).parent
 NX, NY = 720, 360                      # 0.5 degree cells
@@ -38,7 +40,6 @@ cd = np.zeros((NCO, 2, 2), np.int64);   cs = np.zeros((NCO, 2), np.int64)
 overlap_year = np.zeros((NYR, 2, 3), np.uint64)    # (year, sensor, confidence bucket); filtered to shared years after the loop
 OVERLAP_START = 2012                                # VIIRS (Suomi NPP) launched late 2011; earlier years cannot overlap
 MIN_OVERLAP = 1000                                  # a year only counts as shared if EACH sensor has at least this many detections
-add = lambda a, co, ix: a.__iadd__(np.bincount(co * a.shape[1] + ix, minlength=a.size).reshape(a.shape))
 rows = 0
 
 
@@ -61,8 +62,14 @@ import os, re, sys, argparse
 ap = argparse.ArgumentParser(description='Build dataset/fire.bin, fire.json and temp.json')
 ap.add_argument('--source', choices=['auto', 'csv', 'sql'], default='auto')
 ap.add_argument('--tables', default='', help='comma separated list, e.g. dbo.firms_modiis,dbo.firms_viirs')
-ap.add_argument('--limit', type=int, default=0, help='read at most N rows per SQL table (testing)')
+ap.add_argument('--limit', type=int, default=0, help='read at most N raw rows per SQL table (testing)')
+ap.add_argument('--sql-aggregate', action='store_true', help='aggregate SQL rows in the database by cell/month/confidence/night (no brightness fields)')
+ap.add_argument('--sql-sample-percent', type=float, default=0, help='TABLESAMPLE percentage for smoke tests ONLY; automatically disables calibration')
 ARGS = ap.parse_args()
+if ARGS.limit < 0: ap.error('--limit must be >= 0')
+if ARGS.sql_aggregate and ARGS.limit: ap.error('--limit cannot be combined with --sql-aggregate; use --sql-sample-percent for smoke tests')
+if ARGS.sql_sample_percent and not ARGS.sql_aggregate: ap.error('--sql-sample-percent requires --sql-aggregate')
+if not 0 <= ARGS.sql_sample_percent <= 100: ap.error('--sql-sample-percent must be between 0 and 100')
 
 def load_env():
     f = root / '.env'
@@ -87,11 +94,32 @@ def sql_connect():
     server = os.environ.get('AZURE_SQL_SERVER', ''); db = os.environ.get('AZURE_SQL_DATABASE', '')
     user = os.environ.get('AZURE_SQL_USER', ''); pw = os.environ.get('AZURE_SQL_PASSWORD', '')
     if server and '.' not in server: server += '.database.windows.net'
+    if os.environ.get('AZURE_SQL_AUTH') == 'cli':
+        import struct
+        import pyodbc
+        from azure.identity import AzureCliCredential
+
+        token = AzureCliCredential().get_token(
+            'https://database.windows.net/.default'
+        ).token.encode('utf-16-le')
+
+        connection = (
+            'DRIVER={ODBC Driver 18 for SQL Server};'
+            f'SERVER=tcp:{server},1433;'
+            f'DATABASE={db};'
+            'Encrypt=yes;TrustServerCertificate=no;'
+        )
+
+        return pyodbc.connect(
+            connection,
+            attrs_before={1256: struct.pack('<I', len(token)) + token},
+            timeout=30
+        )
     err = []
     try:
         import pyodbc
         if not cs:
-            drv = sorted((d for d in pyodbc.drivers() if 'SQL Server' in d), reverse=True)
+            drv = [d for d in pyodbc.drivers() if d == 'ODBC Driver 18 for SQL Server']
             if not drv: raise RuntimeError('no "ODBC Driver for SQL Server" installed')
             cs = (f'DRIVER={{{drv[0]}}};SERVER={server},1433;DATABASE={db};UID={user};PWD={pw};'
                   'Encrypt=yes;TrustServerCertificate=no;Connection Timeout=60')
@@ -140,8 +168,15 @@ def sql_chunks(size=500_000):
         if 'daynight' in cols: sel.append(f'CAST({q("daynight")} AS varchar(5)) AS daynight')
         for b in ('brightness', 'bright_ti4'):
             if b in cols: sel.append(f'TRY_CAST({q(b)} AS float) AS {b}')
-        top = f'TOP {int(ARGS.limit)} ' if ARGS.limit else ''
-        cur.execute(f'SELECT {top}' + ', '.join(sel) + f' FROM [{sch}].[{nm}]')
+        if ARGS.sql_aggregate and not {'brightness', 'bright_ti4'} & set(cols):
+            print(f'  Running SQL-side GROUP BY for {sch}.{nm} (read-only; the full scan may be expensive)...', flush=True)
+            query = grouped_query(sch, nm, cols, ARGS.sql_sample_percent)
+        else:
+            if ARGS.sql_aggregate:
+                print(f'  WARNING: {sch}.{nm} includes brightness; using raw rows to preserve temperature statistics')
+            top = f'TOP {int(ARGS.limit)} ' if ARGS.limit else ''
+            query = f'SELECT {top}' + ', '.join(sel) + f' FROM [{sch}].[{nm}]'
+        cur.execute(query)
         names = [d[0].lower() for d in cur.description]
         label = f'{sch}.{nm} ({"VIIRS" if sen else "MODIS"})'
         while True:
@@ -172,6 +207,8 @@ for label, sen, ch in chunks():
         if prev is not None: print()
         print('reading', label, flush=True); prev = label
     ch.columns = [c.strip().lower() for c in ch.columns]
+    weights = (pd.to_numeric(ch.multiplicity, errors='coerce').fillna(0).to_numpy(dtype=np.int64)
+               if 'multiplicity' in ch else np.ones(len(ch), dtype=np.int64))
     num = lambda s: pd.to_numeric(s, errors='coerce').to_numpy()
     la, lo = num(ch.latitude), num(ch.longitude)
     yr, mo = num(ch.acq_date.str[:4]) - Y0, num(ch.acq_date.str[5:7]) - 1
@@ -187,7 +224,7 @@ for label, sen, ch in chunks():
     dn = (ch.daynight.str.strip().str.upper().str[:1] == 'N').to_numpy() if 'daynight' in ch else np.zeros(len(ch), bool)
     if ok.any():                                # per-year tally; the shared-year filter is applied once all files are read
         idx = (yr[ok].astype(np.int64) * 2 + sen) * 3 + cb[ok].astype(np.int64)
-        overlap_year += np.bincount(idx, minlength=NYR * 6).reshape(NYR, 2, 3).astype(np.uint64)
+        overlap_year += np.bincount(idx, weights=weights[ok], minlength=NYR * 6).reshape(NYR, 2, 3).astype(np.uint64)
     bcol = 'bright_ti4' if sen else 'brightness'
     br = num(ch[bcol]) if bcol in ch else np.full(len(ch), np.nan)
     la, lo, yr, mo, cb, dn = la[ok], lo[ok], yr[ok].astype(np.int64), mo[ok].astype(np.int64), cb[ok].astype(np.int64), dn[ok].astype(np.int64)
@@ -198,12 +235,14 @@ for label, sen, ch in chunks():
         tcnt += np.bincount(t1[v], minlength=TX * TY); tsum += np.bincount(t1[v], weights=br[v], minlength=TX * TY)
         np.minimum.at(tmin, t1[v], br[v]); np.maximum.at(tmax, t1[v], br[v])
     cell = np.clip(((90 - la) * 2).astype(np.int64), 0, NY - 1) * NX + np.clip(((lo + 180) * 2).astype(np.int64), 0, NX - 1)
-    u, n = np.unique(((yr * 2 + sen) * 3 + cb) * NC + cell, return_counts=True)
+    u, n = grouped_sums(((yr * 2 + sen) * 3 + cb) * NC + cell, weights[ok])
     dense[u] += n.astype(np.uint32)
     co = cc[cell].astype(np.int64); m = co != 255
-    add(cy[:, :, sen], co[m], yr[m]); add(cm[:, :, sen], co[m], mo[m])
-    add(cd[:, :, sen], co[m], dn[m]); add(cs, co[m], np.full(m.sum(), sen))
-    rows += int(ok.sum()); print(f'  {rows:,} detections', end='\r', flush=True)
+    add_weighted(cy[:, :, sen], co[m], yr[m], weights[ok][m])
+    add_weighted(cm[:, :, sen], co[m], mo[m], weights[ok][m])
+    add_weighted(cd[:, :, sen], co[m], dn[m], weights[ok][m])
+    add_weighted(cs, co[m], np.full(m.sum(), sen), weights[ok][m])
+    rows += int(weights[ok].sum()); print(f'  {rows:,} detections', end='\r', flush=True)
 if prev is not None: print()
 
 nz = np.flatnonzero(dense).astype(np.uint32)
@@ -232,6 +271,8 @@ json.dump(dict(nx=TX, ny=TY, unit='K', cells=tn.tolist(), min=np.round(tmin[tn],
 yrs_all = np.arange(NYR) + Y0
 tot = overlap_year.sum(axis=2)                                   # (year, sensor)
 shared_mask = (yrs_all >= OVERLAP_START) & (tot[:, 0] >= MIN_OVERLAP) & (tot[:, 1] >= MIN_OVERLAP)
+if ARGS.sql_sample_percent:
+    shared_mask[:] = False  # sampled counts are NOT calibrated full-population estimates
 shared_years = [int(y) for y in yrs_all[shared_mask]]
 print('\nDetections per year (rows kept by the build):')
 print(f"  {'year':<6}{'MODIS':>14}{'VIIRS':>14}  shared")
@@ -243,7 +284,8 @@ for minimum in range(3):
     modis = int(overlap_counts[0, minimum:].sum())
     viirs = int(overlap_counts[1, minimum:].sum())
     scales.append(modis / viirs if modis and viirs else 1.0)
-overlap = dict(startYear=OVERLAP_START, years=shared_years, source='sql' if sql_used else 'csv', minPerYear=MIN_OVERLAP, counts=overlap_counts.tolist(), scales=scales,
+overlap = dict(startYear=OVERLAP_START, years=shared_years, source=('sql_sample' if ARGS.sql_sample_percent else 'sql') if sql_used else 'csv',
+               samplePercent=ARGS.sql_sample_percent if sql_used else 0, minPerYear=MIN_OVERLAP, counts=overlap_counts.tolist(), scales=scales,
                available=bool(shared_years))
 if shared_years:
     print(f'overlap calibration uses shared years {shared_years}: VIIRS scaled x{scales[0]:.3f} to match MODIS')
