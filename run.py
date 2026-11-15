@@ -8,7 +8,7 @@
 
 Options:  --rebuild  force preprocessing    --port N  choose a port    --no-browser
 """
-import argparse, importlib, importlib.util, pathlib, subprocess, sys, threading, urllib.request, webbrowser
+import argparse, os, importlib, importlib.util, pathlib, subprocess, sys, threading, urllib.request, webbrowser
 import http.server, socketserver, functools
 
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -52,19 +52,27 @@ def ensure_countries():
     except Exception as e:
         sys.exit(f'Could not download it ({e}).\nPut a countries GeoJSON at {GEO} and run again.')
 
+def sql_configured():
+    vals = dict(os.environ); env = ROOT / '.env'
+    if env.exists():
+        for line in env.read_text(encoding='utf-8-sig').splitlines():
+            if '=' in line and not line.strip().startswith('#'):
+                k, v = line.split('=', 1); vals.setdefault(k.strip(), v.strip())
+    return bool(vals.get('AZURE_SQL_CONNECTION_STRING') or (vals.get('AZURE_SQL_SERVER') and vals.get('AZURE_SQL_DATABASE')))
+
 def build_if_needed(force):
     bin_, js = DATA / 'fire.bin', DATA / 'fire.json'
     csvs = list(DATA.rglob('*.csv'))
     if bin_.exists() and js.exists() and (DATA / 'temp.json').exists() and not force:
-        if not csvs or max(c.stat().st_mtime for c in csvs) <= min(bin_.stat().st_mtime, js.stat().st_mtime):
-            say('Dataset summary is up to date.'); return True
+        if sql_configured() or not csvs or max(c.stat().st_mtime for c in csvs) <= min(bin_.stat().st_mtime, js.stat().st_mtime):
+            say('Dataset summary is up to date' + (' (use --rebuild to re-read Azure SQL).' if sql_configured() else '.')); return True
         say('CSV files are newer than fire.bin, rebuilding ...')
-    elif not csvs:
+    elif not csvs and not sql_configured():
         say('No FIRMS CSV files in dataset/ and no fire.bin / fire.json yet.')
         say('Run download_firms.bat (or put MODIS/VIIRS CSVs in dataset/) and run this again.')
         return False
     ensure_countries()
-    subprocess.check_call([sys.executable, str(ROOT / 'preprocess.py')], cwd=ROOT)
+    subprocess.check_call([sys.executable, str(ROOT / 'preprocess.py')], cwd=ROOT)   # reads Azure SQL if configured, else the CSVs
     return True
 
 def serve(port, browser):
