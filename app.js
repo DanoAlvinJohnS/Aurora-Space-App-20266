@@ -11,7 +11,11 @@ const TEX = {
   topo:  ['assets/earth-topology.png', CDN + 'earth-topology.png'],
 };
 const STOPS = [[255,224,138],[255,138,26],[214,18,40],[122,0,25]];
-const ATMO = { day: '#8db4ff', night: '#3b5bc4', live: '#4a7ff8' };
+/* Theme: every colour that belongs to the interface (not the fire data) comes from CSS variables, see style.css and themes.css */
+const tv = (n, d) => (getComputedStyle(document.documentElement).getPropertyValue(n) || '').trim() || d;
+const readAtmo = () => ({ day: tv('--g-atmo-day', '#8db4ff'), night: tv('--g-atmo-night', '#3b5bc4'), live: tv('--g-atmo-live', '#4a7ff8') });
+let ATMO = readAtmo(), PICK = tv('--g-pick', '#ffc757'), RING = tv('--g-ring', '255,200,80');
+let skyCss = tv('--g-sky', 'image') === 'css';
 
 let ref = 1, timer = null, raf = 0, drawTimer = null, sel = -1, area = null, areaHidden = false, noClickUntil = 0;
 let lite = (() => { try { return localStorage.getItem('tf-lite') !== '0'; } catch (e) { return true; } })();   // low-end mode is ON by default; the choice is remembered
@@ -22,7 +26,7 @@ let heatFloor = 0, heatRef = 1;
 
 /* ---------- globe: one merged mesh for all columns, country polygons on top ---------- */
 const globe = Globe()($('#globe'))
-  .backgroundImageUrl(CDN + 'night-sky.png')
+  .backgroundImageUrl(skyCss ? null : CDN + 'night-sky.png').backgroundColor(skyCss ? 'rgba(0,0,0,0)' : '#000011')
   .showAtmosphere(true).atmosphereAltitude(0.2).atmosphereColor(ATMO.live)
   .pointLat('lat').pointLng('lng').pointAltitude('alt').pointColor('col').pointRadius('r')
   .pointResolution(6).pointsMerge(true)

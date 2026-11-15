@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-required=(index.html about.html app.js motion.js sans.js style.css assets/countries.geojson dataset/fire.bin dataset/fire.json)
+required=(index.html about.html app.js motion.js sans.js theme.js style.css themes.css assets/countries.geojson dataset/fire.bin dataset/fire.json)
 for file in "${required[@]}"; do
   if [[ ! -s "$file" ]]; then
     echo "ERROR: Required website file missing/empty: $file" >&2
@@ -18,7 +18,7 @@ cp -R -- assets/. public/assets/
 cp -- dataset/fire.bin dataset/fire.json public/dataset/
 
 # Check files that the current HTML and app.js import.
-for file in index.html app.js motion.js sans.js dataset/fire.bin dataset/fire.json; do
+for file in index.html app.js motion.js sans.js theme.js themes.css dataset/fire.bin dataset/fire.json; do
   test -s "public/$file" || { echo "Failed to package $file" >&2; exit 1; }
 done
 printf 'Built static website in public/\n'
