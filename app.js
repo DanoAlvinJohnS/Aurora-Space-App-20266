@@ -187,6 +187,21 @@ document.querySelectorAll('.seg button').forEach(b => b.onclick = () => setLight
 $('#sunbtn').onclick = () => { updateSun(); globe.controls().autoRotate = false; flyTo({ lat: sun.lat, lng: sun.lng, altitude: 2.2 }); };
 setInterval(() => { if (light === 'live') updateSun(); }, 15000);
 
+/* ---------- restyle the globe when the look changes (theme.js fires "tf:theme") ---------- */
+function applyThemeToGlobe() {
+  ATMO = readAtmo(); PICK = tv('--g-pick', '#ffc757'); RING = tv('--g-ring', '255,200,80');
+  const css = tv('--g-sky', 'image') === 'css';
+  if (css) {                                            // let the page's CSS background (sky, clouds) show through
+    globe.backgroundImageUrl(null).backgroundColor('rgba(0,0,0,0)');
+    try { globe.scene().background = null; } catch (e) { /* older globe.gl */ }
+  } else {                                              // back to the starfield
+    globe.backgroundImageUrl(CDN + 'night-sky.png').backgroundColor('#000011');
+  }
+  skyCss = css;
+  setLighting(light);                                   // re-applies the atmosphere colour
+}
+window.addEventListener('tf:theme', applyThemeToGlobe);
+
 /* ---------- prepared dataset (made once by preprocess.py, cached in the browser) ---------- */
 let M, N, NC, CELL, YR, SN, CB, CNT, CC, countries = [];
 const GM = {}, memo = new Map();

@@ -1,6 +1,6 @@
 /* Easter eggs: a character drifts across the screen now and then. Which one depends on the theme:
      Classic   -> a little spaceship        (drawn right here as an inline SVG)
-     Mario     -> Mario riding a rocket zooms across the screen  (needs assets/mario.png)
+     Mario     -> Mario hops along the ground across the screen  (needs assets/mario.png)
      Undertale -> Sans tumbles through space (assets/sans.png)
    - flies by itself every 30-60 seconds
    - type "ship", "mario" or "sans" anywhere to summon the current one
@@ -26,7 +26,7 @@
   const THEME_CHAR = { classic: 'ship', mario: 'mario', undertale: 'sans' };
   const CHARS = {
     ship:  { src: SHIP, w: 130, cls: 'egg-ship', move: 'cruise', lines: ['Beep boop. Fire detected.', 'Orbiting at 400 km.', 'All systems nominal.', 'Houston, we have a heat map.', 'Scanning for hotspots...', 'Warp drive offline. Vibes online.'] },
-    mario: { src: 'assets/mario.png', w: 120, cls: 'egg-mario', move: 'fly', faces: 'right',   // faces: which way the artwork points ('left' or 'right')
+    mario: { src: 'assets/mario.png', w: 120, cls: 'egg-mario', move: 'jump', faces: 'right',   // faces: which way the artwork points ('left' or 'right')
               lines: ["Let's-a go!", 'Wahoo!', 'Mamma mia, so much fire!', 'Here we go!', 'Hold on tight!'] },
     sans:  { src: 'assets/sans.png', w: 80, cls: 'egg-sans', move: 'tumble', star: true, lines: ['heh.', "it's a beautiful day outside.", 'you should be burning up right now.', 'geeettttt dunked on!', 'nice globe you got there.', 'i got a fire hot take: this is fine.'] }
   };
@@ -65,6 +65,18 @@
       const y = H * (.15 + Math.random() * .45);
       for (let i = 0; i <= 40; i++) { const p = i / 40; out.push(kf(p, y + Math.sin(p * Math.PI * 4) * 8, 0)); }
       return { frames: out, ms: Math.max(4500, Math.min(7500, (W + 3 * w) / .4)) };
+    }
+    if (ch.move === 'jump') {                                 // hop along the ground in arcs (the Mario theme's ground strip is 36px tall)
+      const ground = H - 36 - h + 6, hops = Math.max(3, Math.round(W / 260)), per = 14, peak = Math.min(150, H * .28);
+      for (let k = 0; k < hops; k++) {
+        for (let i = 0; i < per; i++) {
+          const t = i / per, p = (k + t) / hops;
+          out.push(kf(p, ground - peak * 4 * t * (1 - t), 0));
+        }
+        out.push(kf((k + 1) / hops - .004, ground, 0));       // brief landing
+      }
+      out.push(kf(1, ground, 0));
+      return { frames: out, ms: hops * 750 };
     }
     const y0 = H * (.12 + Math.random() * .6), y1 = H * (.12 + Math.random() * .6);
     if (ch.move === 'cruise') {                               // steady flight with a gentle bob, nose follows the path
