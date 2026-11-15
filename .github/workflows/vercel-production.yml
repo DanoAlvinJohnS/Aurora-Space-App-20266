@@ -1,4 +1,4 @@
-name: Deploy TeraFlare from Azure SQL to Vercel
+﻿name: Deploy TeraFlare from Azure SQL to Vercel
 
 # Pushes to main build fresh data before deploying. A manual smoke run
 # checks Azure connectivity but cannot deploy sample data.
@@ -66,7 +66,7 @@ jobs:
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          allow-no-subscriptions: true
       - name: Test Azure SQL access (read-only)
         shell: bash
         run: |
@@ -204,3 +204,4 @@ jobs:
         run: vercel deploy --prebuilt --prod --yes
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
