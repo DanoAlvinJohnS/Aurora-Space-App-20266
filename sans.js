@@ -28,7 +28,7 @@
     ship:  { src: SHIP, w: 130, cls: 'egg-ship', move: 'cruise', lines: ['Beep boop. Fire detected.', 'Orbiting at 400 km.', 'All systems nominal.', 'Houston, we have a heat map.', 'Scanning for hotspots...', 'Warp drive offline. Vibes online.'] },
     mario: { src: 'assets/mario.png', w: 120, cls: 'egg-mario', move: 'jump', faces: 'right',   // faces: which way the artwork points ('left' or 'right')
               lines: ["Let's-a go!", 'Wahoo!', 'Mamma mia, so much fire!', 'Here we go!', 'Hold on tight!'] },
-    sans:  { src: 'assets/sans.png', w: 80, cls: 'egg-sans', move: 'tumble', star: true, lines: ['heh.', "it's a beautiful day outside.", 'you should be burning up right now.', 'geeettttt dunked on!', 'nice globe you got there.', 'i got a fire hot take: this is fine.'] }
+    sans:  { src: 'assets/sans.png', w: 88, cls: 'egg-sans', move: 'tumble', star: true, lines: ['heh.', "it's a beautiful day outside.", 'you should be burning up right now.', 'geeettttt dunked on!', 'nice globe you got there.', 'i got a fire hot take: this is fine.'] }
   };
   const current = () => { const k = THEME_CHAR[document.documentElement.dataset.theme] || 'ship'; return Object.assign({ key: k }, CHARS[k]); };
 
