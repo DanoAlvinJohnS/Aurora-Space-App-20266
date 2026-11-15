@@ -8,9 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400..700&display=swap">
-<script src="theme.js"></script>
-<link rel="stylesheet" href="style.css?v=teraflare-6">
-<link rel="stylesheet" href="themes.css?v=1">
+<link rel="stylesheet" href="style.css?v=teraflare-5">
 </head>
 <body class="globe-page">
 <nav class="glass nav">
@@ -27,10 +25,13 @@
 </aside>
 
 <section id="timeline" class="glass tl" hidden>
-  <button id="play" class="btn">Play</button>
-  <input id="year" type="range" aria-label="Year">
+  <div class="year-range" id="year-range">
+    <input id="year-from" type="range" aria-label="Start year">
+    <input id="year" type="range" aria-label="End year">
+  </div>
   <strong id="yl"></strong>
   <label><input type="checkbox" id="cum" checked> Cumulative</label>
+  <button id="play" class="btn">Play</button>
 </section>
 
 <section id="loading" class="glass card center" hidden>
@@ -52,17 +53,17 @@
   </div>
   <div class="sidebar-tabs" role="tablist" aria-label="Globe panels">
     <button type="button" role="tab" id="dashboard-tab" aria-controls="dashboard-panel" aria-selected="true">Dashboard</button>
-    <button type="button" role="tab" id="explore-tab" aria-controls="explore-panel" aria-selected="false">Explore</button>
+    <button type="button" role="tab" id="view-settings-tab" aria-controls="view-settings-panel" aria-selected="false">View settings</button>
+    <button type="button" role="tab" id="export-tab" aria-controls="export-panel" aria-selected="false">Export</button>
   </div>
-
   <div id="dashboard-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="dashboard-tab">
     <section id="status" aria-label="Burning activity">
       <h2>Burning activity</h2>
       <div id="detail"></div>
     </section>
-    <section id="search" class="acc" aria-label="Search by">
-      <button type="button" class="acc-h" id="search-h" aria-expanded="false" aria-controls="search-b"><span>Search by</span><i aria-hidden="true"></i></button>
-      <div class="acc-b" id="search-b" role="region" aria-labelledby="search-h"><div class="acc-in">
+    <section id="search" aria-label="Search by">
+      <h2 id="search-title">Search by</h2>
+      <div id="search-b" role="region" aria-labelledby="search-title">
         <div id="smode" class="seg3" role="group" aria-label="Search by">
           <button type="button" data-m="country" aria-pressed="true">Country</button>
           <button type="button" data-m="geo" aria-pressed="false">GeoJSON</button>
@@ -81,32 +82,16 @@
           <button id="rbtn" class="btn ghost small" type="button" aria-pressed="false">Draw a rectangle</button>
           <p id="rmsg" class="hint" hidden></p>
         </div>
-      </div></div>
-    </section>
-    <section id="advanced" class="acc" aria-label="Advanced settings">
-      <button type="button" class="acc-h" id="advanced-h" aria-expanded="false" aria-controls="advanced-b"><span>Advanced settings</span><i aria-hidden="true"></i></button>
-      <div class="acc-b" id="advanced-b" role="region" aria-labelledby="advanced-h"><div class="acc-in">
-      <label class="row">Minimum confidence
-        <select id="conf"><option value="0">Any</option><option value="1">Nominal and high</option><option value="2">High only</option></select>
-      </label>
-      <label class="row">Area size
-        <select id="res"><option value="2">Wide (about 110 km)</option><option value="1">Fine (about 55 km)</option></select>
-      </label>
-      <div class="row">Hexagons in a country: show the top share of hotspots
-        <div id="hexpct" class="seg3" role="group" aria-label="Hexagon share"><button type="button" data-p="1" aria-pressed="false">1%</button><button type="button" data-p="10" aria-pressed="true">10%</button><button type="button" data-p="25" aria-pressed="false">25%</button></div>
       </div>
-      </div></div>
     </section>
     <button id="clr" class="btn ghost small inline back" type="button" hidden>Back to overview</button>
-    <p id="subtext" class="subtext">Wildfires reshape air quality, ecosystems and the places people live. Seeing where and how often land burns helps communities and responders prepare, and combining MODIS and VIIRS keeps that picture consistent across the years.</p>
   </div>
 
-  <div id="explore-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="explore-tab" hidden>
+  <div id="view-settings-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="view-settings-tab" hidden>
     <section id="map-sec" class="acc open" aria-label="Map">
       <button type="button" class="acc-h" id="map-sec-h" aria-expanded="true" aria-controls="map-sec-b"><span>Map</span><i aria-hidden="true"></i></button>
       <div class="acc-b" id="map-sec-b" role="region" aria-labelledby="map-sec-h"><div class="acc-in">
       <p class="hint">Overview shows the heat map. Select a country to see its region outlines (colored by frequency) and 3D hexagons.</p>
-      <label class="row"><span>Heat map opacity: <b id="hopv">50</b>%</span><input type="range" id="hop" min="10" max="100" value="50"></label>
       </div></div>
     </section>
     <div hidden>
@@ -123,6 +108,27 @@
       <p id="clock" class="hint clock" hidden></p>
       <button id="sunbtn" class="btn ghost small" hidden>Turn to the sun</button>
       </div></div>
+    </section>
+    <section id="hex-sec" class="acc open" aria-label="Hexagon percentage">
+      <button type="button" class="acc-h" id="hex-sec-h" aria-expanded="true" aria-controls="hex-sec-b"><span>Hexagon percentage</span><i aria-hidden="true"></i></button>
+      <div class="acc-b" id="hex-sec-b" role="region" aria-labelledby="hex-sec-h"><div class="acc-in">
+      <label class="row">Show the top share of hotspots
+        <select id="hexpct" aria-label="Hexagon share">
+          <option value="1">Top 1%</option>
+          <option value="10" selected>Top 10%</option>
+          <option value="25">Top 25%</option>
+        </select>
+      </label>
+      </div></div>
+    </section>
+  </div>
+  <div id="export-panel" class="sidebar-panel" role="tabpanel" aria-labelledby="export-tab" hidden>
+    <section class="export-card" aria-labelledby="export-title">
+      <h2 id="export-title">Report exports</h2>
+      <p class="hint">Download the current overview, selected country, or drawn-area report.</p>
+      <button id="export-csv" class="btn export-btn" type="button">Download CSV</button>
+      <button id="export-image" class="btn ghost export-btn" type="button">Download report image</button>
+      <p id="export-status" class="hint" role="status" aria-live="polite">Exports include annual totals and available report summaries.</p>
     </section>
   </div>
 </aside>
