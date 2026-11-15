@@ -20,27 +20,34 @@
 </nav>
 <main class="page">
   <section class="glass card">
-    <h1>About us</h1>
-    <p>We built TeraFlare for the NASA Space Apps Challenge "Harmonization of MODIS and VIIRS Hot Spots". Our goal is to give emergency responders, scientists and land managers one clear picture of where burning happens and when.</p>
+    <h1>About Us</h1>
+    <img class="about-logo" src="assets/Logos/aurora_rcoketeers_logo.png" alt="Aurora Rocketeers logo">
+    <img class="about-logo" src="assets/Logos/TERAFLARE_LOGO_2.png" alt="TeraFlare logo">
+    <p>Aurora Rocketeers is an aspiring group of Computer Engineers from the Philippines, eager to solve problems on Earth and beyond. TeraFlare is their solution for the NASA Space Apps Challenge, entitled "Harmonization of MODIS and VIIRS Hot Spots". Their goal is to give people a centralized and user-friendly application that depicts one clear picture of where burning happens and when.</p>
   </section>
   <section class="glass card">
-    <h2>The problem</h2>
+    <h2>The Problem</h2>
+    <img class="data-photo" src="assets/Figures/firms_photo.jpg" alt="NASA FIRMS fire data">
     <p>Satellites have tracked active fires for more than twenty years, but the record is split between two sensors, MODIS and VIIRS. Their files use different confidence scales and brightness columns, so they can't be compared directly.</p>
   </section>
   <section class="glass card">
-    <h2>How it works</h2>
+    <h2>How It Works</h2>
+    <img class="data-photo" src="assets/Figures/firms_photo.jpg" alt="NASA FIRMS fire data">
     <p>Run the local preprocessing script on FIRMS CSV files in the dataset folder. It harmonizes MODIS and VIIRS confidence into low, nominal and high categories and creates the compact files loaded by the browser. Explore country-attributed activity with the heat map, H3-based 3D hexagon columns, or raised hotspot markers. Use the timeline, sensor and confidence filters, then select a country or location to inspect historical and seasonal patterns.</p>
   </section>
   <section class="glass card">
     <h2>Data</h2>
-    <p>Fire detections come from NASA FIRMS (Fire Information for Resource Management System). The map and its global counter omit cells without a country assignment; heat-map smoothing can extend slightly past coastlines. When MODIS and VIIRS data overlap from 2012 onward, an optional global count-rate adjustment scales VIIRS to the MODIS overlap total. This is a relative adjustment, not a correction for differences in sensor sensitivity or burned area. Preprocessing and visualization run locally; the app has no project backend.</p>
+    <img class="data-photo" src="assets/Figures/firms_photo.jpg" alt="NASA FIRMS fire data">
+    <p><a class="data-source" href="https://www.earthdata.nasa.gov/data/tools/firms" target="_blank" rel="noopener noreferrer">FIRMS NASA EARTHDATA: Fire Information for Resource Management System.</a> The map and its global counter omit cells without a country assignment; heat-map smoothing can extend slightly past coastlines. When MODIS and VIIRS data overlap from 2012 onward, an optional global count-rate adjustment scales VIIRS to the MODIS overlap total. This is a relative adjustment, not a correction for differences in sensor sensitivity or burned area. Preprocessing and visualization run locally; the app has no project backend.</p>
   </section>
   <section class="glass card">
     <h2>Team</h2>
     <div class="team">
-      <div><strong>Member name</strong><br><span class="hint">Role</span></div>
-      <div><strong>Member name</strong><br><span class="hint">Role</span></div>
-      <div><strong>Member name</strong><br><span class="hint">Role</span></div>
+      <a class="team-member" href="https://ph.linkedin.com/in/baaabon05" target="_blank" rel="noopener noreferrer"><img class="team-photo" src="assets/portraits/aldous.jpg" alt="Portrait of Benedict Aldous Abon"><strong>Benedict Aldous Abon</strong><br><span class="hint">Project / Scrum Leader</span></a>
+      <div class="team-member"><img class="team-photo" src="assets/portraits/alvin.jpg" alt="Portrait of Alvin John Dano"><strong>Alvin John Dano</strong><br><span class="hint">Data Scientist</span></div>
+      <div class="team-member"><img class="team-photo" src="assets/portraits/kyla.jpg" alt="Portrait of Kyla Andrea Lacorte"><strong>Kyla Andrea Lacorte</strong><br><span class="hint">DevOps Engineer</span></div>
+      <div class="team-member"><img class="team-photo" src="assets/portraits/gary.jpg" alt="Portrait of Gary Abraham Muralla"><strong>Gary Abraham Muralla</strong><br><span class="hint">Backend Developer</span></div>
+      <div class="team-member"><img class="team-photo" src="assets/portraits/justin.jpg" alt="Portrait of Justin Bjorn Sanchez"><strong>Justin Bjorn Sanchez</strong><br><span class="hint">Frontend Developer</span></div>
     </div>
   </section>
 </main>
