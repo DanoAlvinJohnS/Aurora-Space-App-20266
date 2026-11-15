@@ -98,6 +98,48 @@ html[data-theme="mario"] .progress i{background:#fbd000;border-radius:0}
 /* easter egg speech box as a pixel box */
 html[data-theme="mario"] .egg-say{border:3px solid #000;border-radius:2px;box-shadow:4px 4px 0 rgba(0,0,0,.4)}
 
+/* ---------- Mario sprites (files live in assets/mario/) ---------- */
+
+/* slider handle = a coin */
+html[data-theme="mario"] input[type=range]::-webkit-slider-thumb{width:24px;height:30px;border:0;border-radius:0;background:url(assets/mario/coin.png) center/contain no-repeat;box-shadow:none;image-rendering:pixelated}
+html[data-theme="mario"] input[type=range]::-moz-range-thumb{width:24px;height:30px;border:0;border-radius:0;background:url(assets/mario/coin.png) center/contain no-repeat;box-shadow:none}
+
+/* overview tiles: Mean = coin, Highest = star, Lowest = goomba */
+html[data-theme="mario"] .tile{position:relative}
+html[data-theme="mario"] :is(.tile,h2,h3,.acc-h,.btn,.tl){image-rendering:pixelated}
+html[data-theme="mario"] .tile::after{content:"";position:absolute;top:4px;right:4px;width:20px;height:20px;background:center/contain no-repeat;pointer-events:none}
+html[data-theme="mario"] .tile:nth-child(1)::after{background-image:url(assets/mario/coin.png)}
+html[data-theme="mario"] .tile:nth-child(2)::after{background-image:url(assets/mario/star.png)}
+html[data-theme="mario"] .tile:nth-child(3)::after{background-image:url(assets/mario/goomba.png)}
+
+/* small icons in headings and buttons */
+html[data-theme="mario"] #status h2::before{content:"";display:inline-block;width:26px;height:26px;margin-right:10px;vertical-align:-7px;background:url(assets/mario/fire-flower.png) center/contain no-repeat}
+html[data-theme="mario"] :is(#search-h,#advanced-h) span::before{content:"";display:inline-block;width:22px;height:22px;margin-right:10px;vertical-align:-6px;background:center/contain no-repeat}
+html[data-theme="mario"] #search-h span::before{background-image:url(assets/mario/question-block.png)}
+html[data-theme="mario"] #advanced-h span::before{background-image:url(assets/mario/fire-ball.png)}
+html[data-theme="mario"] #play::before{content:"";display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;background:url(assets/mario/question-block.png) center/contain no-repeat}
+
+/* goal flagpole standing on the right end of the timeline bar */
+html[data-theme="mario"] .tl::after{content:"";position:absolute;right:20px;bottom:calc(100% - 3px);width:22px;height:120px;background:url(assets/mario/flagpole.png) center bottom/contain no-repeat;pointer-events:none}
+
+/* scenery standing on top of the brick ground (the ground is 40px tall: 36px + a 4px top border) */
+html[data-theme="mario"]::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;image-rendering:pixelated;
+  background-repeat:no-repeat;
+  background-image:url(assets/mario/hill.png),url(assets/mario/bush.png),url(assets/mario/bush.png),url(assets/mario/pipe.png),url(assets/mario/hill.png);
+  background-position:left calc(var(--sbw,33.333vw) + 1vw) bottom 40px,left calc(var(--sbw,33.333vw) + 10vw) bottom 40px,right 17vw bottom 40px,right 11vw bottom 40px,right 1vw bottom 40px;
+  background-size:190px auto,120px auto,100px auto,auto 90px,140px auto}
+
+/* clouds only in the upper sky, so they never sit on the hills, pipe or bricks */
+html[data-theme="mario"] body::before{bottom:200px;background-repeat:repeat-x}
+
+/* a goomba that patrols the ground, walking behind the hills, bushes and pipe */
+html[data-theme="mario"]::before{content:"";position:fixed;left:0;bottom:40px;width:40px;height:40px;z-index:-1;pointer-events:none;image-rendering:pixelated;
+  background:url(assets/mario/goomba.png) center/contain no-repeat;animation:mario-walk 45s linear infinite alternate,mario-waddle .5s steps(1) infinite}
+@keyframes mario-walk{from{translate:-60px 0}to{translate:calc(100vw + 20px) 0}}
+@keyframes mario-waddle{0%{transform:scaleX(1)}50%{transform:scaleX(-1)}}
+@media (prefers-reduced-motion:reduce){html[data-theme="mario"]::before{display:none}}
+@media (max-width:700px){html[data-theme="mario"]::after{display:none}}
+
 /* ---------- Undertale / Deltarune: black boxes, white borders, a red SOUL (all art is CSS + inline SVG) ---------- */
 html[data-theme="undertale"]{
   --rk:0;font-synthesis:none;
