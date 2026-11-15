@@ -294,7 +294,7 @@ function updateOverlapStatus() {
   if (!overlapAvailable()) {
     control.checked = false;
     control.disabled = true;
-    status.textContent = 'Unavailable: add both MODIS and VIIRS detections from 2012 or later.';
+    status.textContent = 'Unavailable: no year has enough detections from both MODIS and VIIRS; raw counts are shown.';
     return;
   }
   control.disabled = false;
@@ -302,7 +302,7 @@ function updateOverlapStatus() {
   if (!modis || !viirs) {
     status.textContent = 'No overlap at this confidence level; raw counts are used for this filter.';
   } else if (control.checked) {
-    status.textContent = `VIIRS scaled by ${overlapScale(MIN_CONFIDENCE).toFixed(3)} using ${modis.toLocaleString()} MODIS and ${viirs.toLocaleString()} VIIRS detections from 2012+.`;
+    status.textContent = `VIIRS scaled by ${overlapScale(MIN_CONFIDENCE).toFixed(3)} using ${modis.toLocaleString()} MODIS and ${viirs.toLocaleString()} VIIRS detections from shared year(s) ${((M.overlap && M.overlap.years) || []).join(', ')}.`;
   } else {
     status.textContent = 'Normalization is off; raw detection counts are shown.';
   }

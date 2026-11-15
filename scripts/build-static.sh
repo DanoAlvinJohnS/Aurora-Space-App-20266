@@ -16,6 +16,11 @@ mkdir -p public/assets public/dataset
 cp -- *.html *.css *.js public/
 cp -R -- assets/. public/assets/
 cp -- dataset/fire.bin dataset/fire.json public/dataset/
+if [[ -s dataset/temp.json ]]; then
+  cp -- dataset/temp.json public/dataset/
+else
+  echo "WARNING: dataset/temp.json missing, the temperature statistics will not work on the site." >&2
+fi
 
 # Check files that the current HTML and app.js import.
 for file in index.html app.js motion.js sans.js theme.js themes.css dataset/fire.bin dataset/fire.json; do
