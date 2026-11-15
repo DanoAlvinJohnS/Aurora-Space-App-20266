@@ -18,9 +18,8 @@ let ATMO = readAtmo(), PICK = tv('--g-pick', '#ffc757'), RING = tv('--g-ring', '
 let skyCss = tv('--g-sky', 'image') === 'css';
 
 let ref = 1, timer = null, raf = 0, drawTimer = null, sel = -1, area = null, areaHidden = false, noClickUntil = 0;
-let lite = (() => { try { return localStorage.getItem('tf-lite') !== '0'; } catch (e) { return true; } })();   // low-end mode is ON by default; the choice is remembered
 let tab = 'stats', loc = null, view = 'heat', gf = 0, prev = new Map(), cur = [], rk = [], anim = 0;
-const HEX_LIMIT = 6000, LOW_HEX_LIMIT = 2000, HEAT_LIMIT = 1200, LOW_HEAT_LIMIT = 450;
+const HEX_LIMIT = 6000, HEAT_LIMIT = 1200;
 let light = 'live', mat = null, T = null, sun = { lat: 0, lng: 0 };
 let heatFloor = 0, heatRef = 1;
 
@@ -44,9 +43,9 @@ const globe = Globe()($('#globe'))
   .polygonAltitude(0.004).polygonSideColor(() => 'rgba(0,0,0,0)').polygonsTransitionDuration(0)
   .onPolygonClick((p, _e, c) => p && Date.now() > noClickUntil && (p.__i === sel && c ? locAt(c.lat, c.lng) : pick(p.__i)));
 
-globe.controls().autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches && !lite;
+globe.controls().autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
 globe.controls().autoRotateSpeed = 0.4;
-const fit = () => { globe.renderer().setPixelRatio(lite ? 1 : Math.min(devicePixelRatio || 1, 1.5)); globe.width(innerWidth).height(innerHeight); };
+const fit = () => { globe.renderer().setPixelRatio(Math.min(devicePixelRatio || 1, 1.5)); globe.width(innerWidth).height(innerHeight); };
 addEventListener('resize', () => { fit(); updateNames(); }); fit();
 
 /* ---------- spring camera: starts from where the globe is NOW, keeps its velocity if interrupted ---------- */
@@ -55,7 +54,7 @@ function flyTo(t, instant) {
   const p = globe.pointOfView();
   const v0 = cam ? cam.velocity() : undefined;
   if (cam) { cam.stop(); cam = null; }
-  if (instant || lite || reduced.v) { globe.pointOfView(t, 0); return; }
+  if (instant || reduced.v) { globe.pointOfView(t, 0); return; }
   const dl = (((t.lng - p.lng + 540) % 360) + 360) % 360 - 180;            // shortest way round the planet
   cam = spring([p.lat, p.lng, p.altitude], [t.lat, p.lng + dl, t.altitude], { response: .5, damping: 1, velocity: v0, eps: .01 },
     ([lat, lng, altitude]) => globe.pointOfView({ lat, lng, altitude }, 0), () => { cam = null; });
@@ -239,7 +238,7 @@ async function boot() {
   ['#controls', '#timeline'].forEach(s => $(s).hidden = false);
   materialize($('#controls'), { dx: -18, dy: 0 });
   configureOverlap();
-  $('#lite').checked = lite; if (lite) $('#res').value = '2'; run(); paintHeat();
+  run(); paintHeat();
   detail(); draw();
   await nextPaint(); $('#loading').hidden = true; updateHere(true); updateNames();
   (window.requestIdleCallback || setTimeout)(() => loadAdmin1().then(() => updateHere(true)));   // region / province names for the location pill
@@ -358,7 +357,7 @@ function agg() {
   return r;
 }
 function hexLimit() {
-  return lite ? LOW_HEX_LIMIT : HEX_LIMIT;
+  return HEX_LIMIT;
 }
 function coarsen(pts, limit, step) {          // merge nearby cells until at most `limit` points remain (keeps full coverage, unlike dropping weak cells)
   for (;;) {
@@ -375,7 +374,7 @@ function coarsen(pts, limit, step) {          // merge nearby cells until at mos
 function applyHeat() {
   if (heat) { globe.heatmapsData([]); return; }   // the canvas overlay draws it
   const all = cur.map(q => ({ lat: q.lat, lng: q.lng, weight: q.v }));
-  const c = all.length ? coarsen(all, lite ? LOW_HEAT_LIMIT : HEAT_LIMIT, sel >= 0 ? .5 : lite ? 4 : 2) : null;
+  const c = all.length ? coarsen(all, HEAT_LIMIT, sel >= 0 ? .5 : 2) : null;
   if (c) globe.heatmapBandwidth(Math.max(sel >= 0 ? .8 : 1.5, c.step * .7));
   globe.heatmapsData(c ? [c.pts] : []);
 }
@@ -430,11 +429,7 @@ function ensureUI() {                                  // makes the loaders work
   if (!document.getElementById('tf-css')) { const st = document.createElement('style'); st.id = 'tf-css'; st.textContent = CSS_UI; document.head.appendChild(st); }
   if (!$('#busy')) { const b = document.createElement('div'); b.id = 'busy'; b.className = 'glass busy'; b.hidden = true; b.innerHTML = '<i class="spin"></i><span id="busytxt"></span>'; document.body.appendChild(b); }
   if (!$('#here')) { const b = document.createElement('button'); b.id = 'here'; b.className = 'glass here'; b.hidden = true; b.title = 'Select this country'; document.body.appendChild(b); }
-  const lt = $('#lite');
-  if (lt && !$('#hop')) {
-    let v = 50; try { v = +localStorage.getItem('tf-hop') || 50; } catch (e) { /* ignore */ }
-    lt.closest('label').insertAdjacentHTML('afterend', `<label class="row"><span>Heat map opacity: <b id="hopv">${v}</b>%</span><input type="range" id="hop" min="10" max="100" value="${v}"></label>`);
-  }
+  { const hp = $('#hop'); if (hp) { let v = 50; try { v = +localStorage.getItem('tf-hop') || 50; } catch (e) { /* ignore */ } hp.value = v; $('#hopv').textContent = v; } }
   const ld = $('#loading'), h = ld && ld.querySelector('h1');
   if (h && !ld.querySelector('.skrow')) h.insertAdjacentHTML('afterend', '<div class="skrow"><i class="sk"></i><i class="sk"></i><i class="sk"></i><i class="sk"></i></div>');
 }
@@ -458,11 +453,11 @@ const HOP = () => { const e = document.getElementById('hop'); return (e ? +e.val
 function initHeat() {
   if (!T) return;
   try {
-    hc.width = lite ? 1024 : 2048; hc.height = hc.width / 2; oc.width = lite ? 2048 : 4096; oc.height = oc.width / 2;   // final size BEFORE the textures exist
-    const geo = () => new T.SphereGeometry(101, lite ? 48 : 64, lite ? 32 : 44), aniso = globe.renderer().capabilities.getMaxAnisotropy();
+    hc.width = 2048; hc.height = hc.width / 2; oc.width = 4096; oc.height = oc.width / 2;   // final size BEFORE the textures exist
+    const geo = () => new T.SphereGeometry(101, 64, 44), aniso = globe.renderer().capabilities.getMaxAnisotropy();
     const tx = new T.CanvasTexture(hc), tl = new T.CanvasTexture(oc); tl.anisotropy = aniso;
     heat = new T.Mesh(geo(), new T.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false, opacity: HOP() }));
-    lab = new T.Mesh(new T.SphereGeometry(101.4, lite ? 48 : 64, lite ? 32 : 44), new T.MeshBasicMaterial({ map: tl, transparent: true, depthWrite: false }));
+    lab = new T.Mesh(new T.SphereGeometry(101.4, 64, 44), new T.MeshBasicMaterial({ map: tl, transparent: true, depthWrite: false }));
     for (const [m, o, t] of [[heat, 2, tx], [lab, 3, tl]]) { m.rotation.y = -Math.PI / 2; m.renderOrder = o; m.userData.tx = t; m.raycast = () => {}; globe.scene().add(m); }
   } catch (e) { console.warn('Overlay layers failed, using plain borders', e); heat = lab = null; }
 }
@@ -486,13 +481,12 @@ function paintMask() {                                  // the shader blurs (mip
     mtex.needsUpdate = true;
   }
   cancelAnimationFrame(maskRaf);
-  if (lite) { u.value = to; return; }
   const t0 = performance.now(), st = t => { const p = Math.min(1, (t - t0) / 450); u.value = from + (to - from) * p; if (p < 1) maskRaf = requestAnimationFrame(st); };
   maskRaf = requestAnimationFrame(st);
 }
 function paintOutlines() {                              // crisp borders, drawn once per size / selection (names are DOM text, see updateNames)
   if (!lab || !FEATS.length) return;
-  const W = lite ? 2048 : 4096, H = W / 2, rs = sel >= 0 && A1 ? regionStats(sel) : null, key = W + '|' + sel + '|' + (rs ? 1 : 0);
+  const W = 4096, H = W / 2, rs = sel >= 0 && A1 ? regionStats(sel) : null, key = W + '|' + sel + '|' + (rs ? 1 : 0);
   if (key === oKey) return; oKey = key;
   if (!BBW.length) BBW = FEATS.map(f => { const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates; return Math.max(...polys.map(p => { const xs = p[0].map(c => c[0]); return Math.max(...xs) - Math.min(...xs); })); });
   if (oc.width !== W) { oc.width = W; oc.height = H; lab.userData.tx.dispose(); }
@@ -637,7 +631,7 @@ function setSelPath() {                                // the selected country's
 function paintHeat() {
   setSelPath(); paintMask(); paintOutlines();
   if (!heat) return;
-  const W = lite ? 1024 : 2048, H = W / 2;
+  const W = 2048, H = W / 2;
   if (hc.width !== W) { hc.width = W; hc.height = H; heat.userData.tx.dispose(); }
   hx.clearRect(0, 0, W, H);
   {
@@ -652,7 +646,7 @@ function paintHeat() {
   }
   heat.userData.tx.needsUpdate = true;
   const m = heat.material, o = HOP(); cancelAnimationFrame(fadeRaf);
-  if (!fadeNext || lite) { m.opacity = o; fadeNext = false; return; }
+  if (!fadeNext) { m.opacity = o; fadeNext = false; return; }
   fadeNext = false; m.opacity = 0; const t0 = performance.now();
   const step = t => { const p = Math.min(1, (t - t0) / 350); m.opacity = p * o; if (p < 1) fadeRaf = requestAnimationFrame(step); };
   fadeRaf = requestAnimationFrame(step);
@@ -1133,10 +1127,9 @@ document.addEventListener('input', e => {
   const v = e.target.value; $('#hopv').textContent = v; try { localStorage.setItem('tf-hop', v); } catch (x) { /* ignore */ }
   if (heat) heat.material.opacity = v / 100;
 });
-$('#lite').onchange = e => { lite = e.target.checked; try { localStorage.setItem('tf-lite', lite ? '1' : '0'); } catch (x) { /* ignore */ } fit(); if (lite) globe.controls().autoRotate = false; run(); paintHeat(); };
 document.addEventListener('visibilitychange', () => document.hidden ? globe.pauseAnimation() : globe.resumeAnimation());
 { const ctl = globe.controls(); let rt = 0;           // render at lower resolution while dragging, restore when idle
-  ctl.addEventListener('start', () => { clearTimeout(rt); globe.renderer().setPixelRatio(lite ? .6 : .85); });
+  ctl.addEventListener('start', () => { clearTimeout(rt); globe.renderer().setPixelRatio(.85); });
   ctl.addEventListener('end', () => { updateNames(); clearTimeout(rt); rt = setTimeout(() => { fit(); paintOutlines(); }, 400); });
   ctl.addEventListener('change', () => { if (tx.view === 'globe' && !tx.busy) updateHere(); });
   document.addEventListener('click', e => { const h = e.target.closest('#here'); if (h && +h.dataset.i >= 0) pick(+h.dataset.i); }); }
@@ -1156,7 +1149,7 @@ async function preloadAbout() {
   if (main) { AB.replaceChildren(document.importNode(main, true)); AB.dataset.ready = '1'; }
 }
 const aboutReady = preloadAbout();
-const EASE = 'cubic-bezier(.65,0,.35,1)';                // ease in and out; these moves always play, also in low-end mode and with reduced motion
+const EASE = 'cubic-bezier(.65,0,.35,1)';                // ease in and out; these moves always play, also with reduced motion
 async function slideOut(el, cls, ms) {
   if (!el || el.hidden) return;
   const a = el.animate({ translate: ['0 0', cls === 'away-l' ? '-100vw 0' : '100vw 0'], opacity: [1, 0] }, { duration: ms, easing: EASE, fill: 'forwards' });
@@ -1202,7 +1195,7 @@ async function showAbout() {                             // sidebar + play bar g
   tx.busy = true; document.body.classList.add('tx', 'in-about');
   const ctl = globe.controls(); tx.rot = ctl.autoRotate; tx.pov = globe.pointOfView(); if (cam) { cam.stop(); cam = null; }
   ctl.autoRotate = false; startSpin();
-  globe.renderer().setPixelRatio(lite ? .6 : .85);       // lighter frames while things move
+  globe.renderer().setPixelRatio(.85);       // lighter frames while things move
   await Promise.all([...LEFT().map(el => slideOut(el, 'away-l', 560)), ...RIGHT().map(el => slideOut(el, 'away-r', 560))]);
   suspendSel();
   ctl.enabled = false; $('#globe').style.pointerEvents = 'none';
@@ -1212,7 +1205,7 @@ async function showAbout() {                             // sidebar + play bar g
 }
 async function showGlobe() {                             // the same steps backwards; the camera returns to the selected country, or to where it was before About
   tx.busy = true; document.body.classList.add('tx');
-  const ctl = globe.controls(); globe.renderer().setPixelRatio(lite ? .6 : .85);
+  const ctl = globe.controls(); globe.renderer().setPixelRatio(.85);
   const a = AB.animate({ translate: ['0 0', '0 100%'], opacity: [1, 0] }, { duration: 700, easing: EASE, fill: 'forwards' });
   await a.finished.catch(() => {}); AB.classList.remove('on'); a.cancel();
   AB.setAttribute('aria-hidden', 'true'); document.body.classList.remove('in-about');

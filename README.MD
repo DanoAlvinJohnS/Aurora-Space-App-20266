@@ -27,7 +27,7 @@ This repository includes a lightweight project scaffold and a clear local setup 
   - [Dataset](#dataset)
   - [Getting started](#getting-started)
   - [Project structure](#project-structure)
-  - [Performance and low-end devices](#performance-and-low-end-devices)
+  - [Performance](#performance)
   - [Limitations](#limitations)
   - [Roadmap (progression)](#roadmap-progression)
 
@@ -101,7 +101,6 @@ Branding: **Powerr** for the TeraFlare wordmark, **Bricolage Grotesque** for hea
 - Minimum confidence: Any / Nominal and high / High only
 - Area size: Wide (~110 km) / Fine (~55 km)
 - Country search
-- **Low-end mode** (auto-detected, can be toggled)
 
 ## How it works
 
@@ -185,11 +184,11 @@ The repository includes a minimal working scaffold for the app and the expected 
 
 This layout keeps the generated data and source assets separate, while making the repository easier to manage without committing the large NASA FIRMS archives.
 
-## Performance and low-end devices
+## Performance
 
 - Heavy work happens **once** in preprocessing; the browser loads a compact binary summary.
 - Aggregations are memoized per setting; the cache is bounded to limit memory use. Raised-hotspot grow-in uses a few updates instead of rebuilding the scene every frame.
-- Heat-map KDE is capped at **2,000 input points**. **Low-end mode** (auto-on for ≤ 4 CPU cores or ≤ 4 GB RAM) also caps hexagon and hotspot inputs at 2,000; standard mode allows up to 6,000.
+- Heat-map KDE is capped at **2,000 input points**. Hexagon and hotspot inputs are capped at 6,000.
 - Rendering pauses when the tab is hidden; respects `prefers-reduced-motion`.
 
 ## Limitations
@@ -209,7 +208,7 @@ Being honest about what the numbers mean:
 - [x] Harmonized MODIS + VIIRS summary
 - [x] Historical progression (time slider, play, cumulative)
 - [x] Land-attributed heat map, H3 3D hexagon columns, raised hotspot markers, country drill-down, per-location history
-- [x] Animation and low-end optimization
+- [x] Animation and performance optimization
 - [x] Sensor-overlap normalization using the shared 2012+ period (requires both sensors in the input data)
 - [ ] Anomaly highlighting ("unusual conditions" vs. a location's baseline)
 - [ ] Area-of-interest selection finer than country (draw a region)
